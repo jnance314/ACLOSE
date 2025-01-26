@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "atmose"
+version = "0.1.0"
+description = "ATMOSE- Automatic Topic Modeling Over Semantic Embeddings"
+authors = ["Joe Nance <joe@nceno.app>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+scikit-learn = "^1.6.1"
+tqdm = "^4.67.1"
+openai = "^1.59.9"
+python-dotenv = "^1.0.1"
+hdbscan = "^0.8.40"
+llvmlite = "^0.44.0"
+umap-learn = "^0.5.7"
+plotly = "^5.24.1"
+httpx = "^0.28.1"
+backoff = "^2.2.1"
+optuna = "^4.2.0"
+psutil = "^6.1.1"
+asyncio = "^3.4.3"
+pandas = "^2.2.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

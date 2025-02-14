@@ -1,13 +1,16 @@
 [tool.poetry]
 name = "atmose"
-version = "0.1.0"
+version = "0.0.28"
 description = "ATMOSE- Automatic Topic Modeling Over Semantic Embeddings"
 authors = ["Joe Nance <joe@nceno.app>"]
 license = "MIT"
 readme = "README.md"
 
+[[tool.poetry.packages]]
+include = "atmose"
+
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.10"
 scikit-learn = "^1.6.1"
 tqdm = "^4.67.1"
 openai = "^1.59.9"
@@ -21,8 +24,13 @@ backoff = "^2.2.1"
 optuna = "^4.2.0"
 psutil = "^6.1.1"
 asyncio = "^3.4.3"
-pandas = "^2.2.3"
+pandas = "^2.2.2"
 
+
+[tool.poetry.group.dev.dependencies]
+langchain-openai = "0.3.0"
+langchain-core = "0.3.29"
+pytest = "^8.3.4"
 
 [build-system]
 requires = ["poetry-core"]

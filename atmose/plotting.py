@@ -5,6 +5,7 @@ import re
 import plotly.graph_objects as go
 import plotly.express as px
 import logging
+from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,7 @@ def _color_map(
     logger.debug(f"Color map created: {color_map}")
     return color_map
 
+
 def _prepare_topic_counts(clusters_df: pd.DataFrame) -> pd.DataFrame:
     """
     Prepare a DataFrame of topic counts from clustering results.
@@ -99,6 +101,7 @@ def _prepare_topic_counts(clusters_df: pd.DataFrame) -> pd.DataFrame:
     topic_counts = topic_counts.sort_values('count', ascending=True)
     logger.debug("Topic counts prepared.")
     return topic_counts
+
 
 def _cluster_bar_chart_fig(
         clusters_df: pd.DataFrame,
@@ -199,215 +202,6 @@ def _cluster_bar_chart_fig(
     logger.debug("Cluster bar chart created successfully.")
     return fig
 
-def _clusters_point_cloud_fig(
-        clusters_df: pd.DataFrame,
-        color_map: dict,
-        id_col_name=None,
-        content_col_name: str = 'content',
-        wrap_width: int = 100
-    ) -> go.Figure:
-    """
-    Plot clusters in 2D or 3D space with topic labels using Plotly.
-
-    The function expects a 'reduced_vector' column in the DataFrame, where each entry is list-like.
-    If the dimensionality of the reduced vectors is greater than 3, a warning is logged and a placeholder
-    figure with an annotation is returned.
-
-    Args:
-        - clusters_df (pd.DataFrame): DataFrame containing columns 'cluster_id' and 'reduced_vector' (among others).
-        - color_map (dict): Dictionary mapping valid cluster IDs to color strings.
-        - id_col_name: Optional column name for record IDs.
-        - content_col_name (str): Name of the column containing the text content.
-        - wrap_width (int): Maximum width for wrapping text in hover labels.
-
-    Returns:
-        - go.Figure: A Plotly Figure object representing the scatter plot (or a figure with a warning if dims > 3).
-    """
-    logger.debug("Generating clusters point cloud plot.")
-    # Validate input DataFrame is not empty and contains required 'reduced_vector' column
-    if clusters_df.empty:
-        logger.error("Input clusters DataFrame is empty.")
-        raise ValueError("Input DataFrame is empty.")
-
-    if 'reduced_vector' not in clusters_df.columns:
-        logger.error("DataFrame does not contain 'reduced_vector' column.")
-        raise ValueError("DataFrame must contain 'reduced_vector' column.")
-
-    # Check first entry to determine if vectors are list-like and determine dimensionality.
-    first_vector = clusters_df['reduced_vector'].iloc[0]
-    if not isinstance(first_vector, (list, tuple, np.ndarray)):
-        logger.error("'reduced_vector' entries are not list-like.")
-        raise ValueError("'reduced_vector' entries must be list-like.")
-
-    # Determine the dimension from the length of the first vector.
-    dim = len(first_vector)
-    if dim > 3:
-        logger.warning("Cannot plot scatter plot with dims > 3... Skipping plot")
-        fig = go.Figure()
-        fig.add_annotation(
-            text=f"Data has dims={dim}. Cannot plot scatter plot with dims > 3. Skipping plot.",
-            showarrow=False,
-            xref="paper", yref="paper",
-            x=0.5, y=0.5,
-            font=dict(size=20, color="red")
-        )
-        return fig
-
-    # Determine whether to plot in 3D or 2D
-    has_3d = (dim == 3)
-    logger.debug(f"Detected {'3D' if has_3d else '2D'} plotting based on 'reduced_vector'.")
-    
-    fig = go.Figure()
-    # Loop over each unique cluster and add corresponding scatter trace
-    for cluster_id in sorted(clusters_df['cluster_id'].unique()):
-        cluster_data = clusters_df[clusters_df['cluster_id'] == cluster_id]
-        if cluster_data.empty:
-            logger.debug(f"Skipping empty cluster: {cluster_id}")
-            continue
-
-        # Determine visual properties based on whether the cluster is noise (-1) or a valid cluster.
-        is_noise = (cluster_id == -1)
-        opacity = 0.35 if is_noise else 0.75
-        symbol = 'circle'
-        size = 2 if is_noise else 4
-        legend_name = str(cluster_id) if not is_noise else 'Noise'
-        point_color = color_map.get(cluster_id, 'gray')
-
-        # Create hover text by wrapping content text and adding cluster/topic info
-        hover_text = cluster_data.apply(
-            lambda row: f"Cluster: {row['cluster_id']}" +
-                        (f"<br>Topic: {row['topic']}<br><br>" if 'topic' in row.index else "") +
-                        (f"ID: {row[id_col_name]}<br>" if id_col_name is not None else "") +
-                        f"Content: {_wrap_text(text=row[content_col_name], width=wrap_width)}",
-            axis=1
-        )
-
-        # Extract x and y coordinates from the reduced vector
-        x = cluster_data['reduced_vector'].apply(lambda v: v[0])
-        y = cluster_data['reduced_vector'].apply(lambda v: v[1])
-
-        # Add scatter trace depending on dimensionality
-        if has_3d:
-            z = cluster_data['reduced_vector'].apply(lambda v: v[2])
-            fig.add_trace(go.Scatter3d(
-                x=x,
-                y=y,
-                z=z,
-                mode='markers',
-                marker=dict(
-                    size=size,
-                    color=point_color,
-                    opacity=opacity,
-                    symbol=symbol,
-                    line=dict(color='rgba(0,0,0,0.2)', width=0.5)
-                ),
-                name=legend_name,
-                text=hover_text,
-                hoverinfo='text',
-                showlegend=True
-            ))
-        else:
-            fig.add_trace(go.Scatter(
-                x=x,
-                y=y,
-                mode='markers',
-                marker=dict(
-                    size=size,
-                    color=point_color,
-                    opacity=opacity,
-                    symbol=symbol,
-                    line=dict(color='rgba(0,0,0,0.2)', width=0.5)
-                ),
-                name=legend_name,
-                text=hover_text,
-                hoverinfo='text',
-                showlegend=True
-            ))
-        
-        # Add topic labels at the centroid of non-noise clusters
-        if not is_noise:
-            # Determine representative topic label using mode if available
-            if 'topic' in cluster_data.columns:
-                cluster_topic = cluster_data['topic'].mode().iloc[0]
-            else:
-                cluster_topic = f"Cluster {cluster_id}"
-            center_x = cluster_data['reduced_vector'].apply(lambda v: v[0]).mean()
-            center_y = cluster_data['reduced_vector'].apply(lambda v: v[1]).mean()
-
-            if has_3d:
-                center_z = cluster_data['reduced_vector'].apply(lambda v: v[2]).mean()
-                fig.add_trace(go.Scatter3d(
-                    x=[center_x],
-                    y=[center_y],
-                    z=[center_z],
-                    mode='text',
-                    text=[cluster_topic],
-                    textposition="middle center",
-                    textfont=dict(size=14, color='white', family="Arial Black"),
-                    hoverinfo='skip',
-                    showlegend=False
-                ))
-            else:
-                fig.add_trace(go.Scatter(
-                    x=[center_x],
-                    y=[center_y],
-                    mode='text',
-                    text=[cluster_topic],
-                    textposition="middle center",
-                    textfont=dict(size=14, color='white', family="Arial Black"),
-                    hoverinfo='skip',
-                    showlegend=False
-                ))
-    
-    # Configure overall layout settings for the plot, including dark theme and legend.
-    layout_args = dict(
-        title=dict(
-            text='Clusters',
-            x=0.5,
-            font=dict(size=24, color='white')
-        ),
-        plot_bgcolor='black',
-        paper_bgcolor='black',
-        showlegend=True,
-        height=1000,
-        margin=dict(l=0, r=120, t=50, b=0),
-        legend=dict(
-            x=1,
-            y=0.5,
-            xanchor='left',
-            font=dict(size=12, color='white')
-        ),
-        hoverlabel=dict(
-            bgcolor='rgba(0,0,0,0.8)',
-            font=dict(color='white', size=12),
-            align='left',
-            namelength=-1
-        )
-    )
-
-    if has_3d:
-        layout_args.update(dict(
-            scene=dict(
-                xaxis=dict(showgrid=False, zeroline=False, visible=False),
-                yaxis=dict(showgrid=False, zeroline=False, visible=False),
-                zaxis=dict(showgrid=False, zeroline=False, visible=False),
-                bgcolor='black',
-                camera=dict(
-                    up=dict(x=0, y=0, z=1),
-                    center=dict(x=0, y=0, z=0),
-                    eye=dict(x=1.5, y=1.5, z=1.5)
-                )
-            )
-        ))  # type: ignore
-    else:
-        layout_args.update(dict(
-            xaxis=dict(showgrid=False, zeroline=False, visible=False),
-            yaxis=dict(showgrid=False, zeroline=False, visible=False)
-        ))
-
-    fig.update_layout(**layout_args)  # type: ignore
-    logger.debug("Clusters point cloud plot created successfully.")
-    return fig
 
 def _silhouette_fig(
         clustered_df: pd.DataFrame,
@@ -550,6 +344,7 @@ def _silhouette_fig(
     logger.debug("Silhouette plot created successfully.")
     return fig
 
+
 def _add_silhouette_cluster(
         fig, 
         cluster, 
@@ -615,6 +410,7 @@ def _add_silhouette_cluster(
     # Return updated y_upper position for the next cluster silhouette
     return y_lower - spacing
 
+
 def _wrap_text(
         text: str, 
         width: int | None = None
@@ -652,6 +448,7 @@ def _wrap_text(
 
     # Join wrapped lines with HTML line breaks, filtering out any empty lines
     return '<br>'.join(filter(None, wrapped_lines))
+
 
 def _wrap_paragraph(
         text: str, 
@@ -714,6 +511,7 @@ def _wrap_paragraph(
 
     return lines
 
+
 def _is_chinese(char: str) -> bool:
     """
     Check if a character is Chinese.
@@ -728,6 +526,7 @@ def _is_chinese(char: str) -> bool:
     # Determine if the Unicode code point falls within the range for Chinese characters
     # -------------------------------
     return '\u4e00' <= char <= '\u9fff'
+
 
 def _split_mixed_text(text: str) -> list:
     """
@@ -752,6 +551,7 @@ def _split_mixed_text(text: str) -> list:
     # -------------------------------
     pattern = r'[\u4e00-\u9fff]|[^\s\u4e00-\u9fff]+|\s+'
     return [chunk for chunk in re.findall(pattern, text) if chunk]
+
 
 def _wrap_english_text(text: str, width: int) -> list:
     """
@@ -787,6 +587,322 @@ def _wrap_english_text(text: str, width: int) -> list:
     if current_line:
         lines.append(' '.join(current_line))
     return lines
+
+
+# -------------------------------------------------------------------------
+# Class for Scatter (Point Cloud) Plot
+# -------------------------------------------------------------------------
+
+class ScatterPlot:
+    """
+    Class to generate a scatter (point cloud) plot for clustering visualization using Plotly.
+
+    This class encapsulates input validation, trace generation for each cluster (including hover text and centroid annotations),
+    and layout configuration. It supports both 2D and 3D visualizations based on the dimensionality of the reduced vectors.
+    """
+
+    def __init__(
+            self,
+            clusters_df: pd.DataFrame,
+            color_map: dict,
+            id_col_name: Optional[str] = None,
+            content_col_name: str = 'content',
+            wrap_width: int = 100
+        ):
+        """
+        Initialize the ScatterPlot with clustering results and plotting configuration.
+
+        Args:
+            - clusters_df (pd.DataFrame): DataFrame containing clustering results with 'cluster_id' and 'reduced_vector' (among others).
+            - color_map (dict): Dictionary mapping valid cluster IDs to color strings.
+            - id_col_name: Optional column name for record IDs.
+            - content_col_name (str): Name of the column containing the text content.
+            - wrap_width (int): Maximum width for wrapping text in hover labels.
+        """
+        self.clusters_df = clusters_df
+        self.color_map = color_map
+        self.id_col_name = id_col_name
+        self.content_col_name = content_col_name
+        self.wrap_width = wrap_width
+        self.dim = self._validate_and_extract_vectors()
+
+    def _validate_and_extract_vectors(self) -> int:
+        """
+        Validate that the DataFrame is not empty and contains a 'reduced_vector' column.
+        Also check that the first entry in 'reduced_vector' is list-like and determine its dimensionality.
+
+        Returns:
+            - int: Dimensionality of the reduced vectors.
+
+        Raises:
+            - ValueError: If the DataFrame is empty, missing the 'reduced_vector' column, or if the entries are not list-like.
+        """
+        logger.debug("Validating input DataFrame for scatter plot.")
+        if self.clusters_df.empty:
+            logger.error("Input clusters DataFrame is empty.")
+            raise ValueError("Input DataFrame is empty.")
+
+        if 'reduced_vector' not in self.clusters_df.columns:
+            logger.error("DataFrame does not contain 'reduced_vector' column.")
+            raise ValueError("DataFrame must contain 'reduced_vector' column.")
+
+        first_vector = self.clusters_df['reduced_vector'].iloc[0]
+        if not isinstance(first_vector, (list, tuple, np.ndarray)):
+            logger.error("'reduced_vector' entries are not list-like.")
+            raise ValueError("'reduced_vector' entries must be list-like.")
+
+        dim = len(first_vector)
+        logger.debug(f"Determined reduced vector dimensionality: {dim}")
+        return dim
+
+    def _generate_hover_text(self, row: pd.Series) -> str:
+        """
+        Generate hover text for a data point in the scatter plot.
+
+        Args:
+            - row (pd.Series): A row from the DataFrame representing a single data point.
+
+        Returns:
+            - str: The formatted hover text.
+        """
+        hover = f"Cluster: {row['cluster_id']}"
+        if 'topic' in row:
+            hover += f"<br>Topic: {row['topic']}<br><br>"
+        if self.id_col_name is not None:
+            hover += f"ID: {row[self.id_col_name]}<br>"
+        hover += f"Content: {_wrap_text(text=row[self.content_col_name], width=self.wrap_width)}"
+        return hover
+
+    def _create_centroid_annotation(
+            self,
+            cluster_data: pd.DataFrame,
+            has_3d: bool,
+            cluster_topic: str
+        ) -> go.Trace:
+        """
+        Create a text annotation at the centroid of a non-noise cluster.
+
+        Args:
+            - cluster_data (pd.DataFrame): Data for the current cluster.
+            - has_3d (bool): Flag indicating whether to plot in 3D.
+            - cluster_topic (str): The representative topic label for the cluster.
+
+        Returns:
+            - go.Trace: A Plotly trace containing the centroid annotation.
+        """
+        center_x = cluster_data['reduced_vector'].apply(lambda v: v[0]).mean()
+        center_y = cluster_data['reduced_vector'].apply(lambda v: v[1]).mean()
+
+        if has_3d:
+            center_z = cluster_data['reduced_vector'].apply(lambda v: v[2]).mean()
+            annotation = go.Scatter3d(
+                x=[center_x],
+                y=[center_y],
+                z=[center_z],
+                mode='text',
+                text=[cluster_topic],
+                textposition="middle center",
+                textfont=dict(size=14, color='white', family="Arial Black"),
+                hoverinfo='skip',
+                showlegend=False
+            )
+        else:
+            annotation = go.Scatter(
+                x=[center_x],
+                y=[center_y],
+                mode='text',
+                text=[cluster_topic],
+                textposition="middle center",
+                textfont=dict(size=14, color='white', family="Arial Black"),
+                hoverinfo='skip',
+                showlegend=False
+            )
+        return annotation # type: ignore
+
+    def _create_cluster_trace(
+            self,
+            cluster_data: pd.DataFrame,
+            cluster_id: int,
+            has_3d: bool
+        ) -> List[go.Trace]:
+        """
+        Create scatter traces for a single cluster, including hover text and (for non-noise clusters) a centroid annotation.
+
+        Args:
+            - cluster_data (pd.DataFrame): Data for the specific cluster.
+            - cluster_id (int): The ID of the cluster.
+            - has_3d (bool): Flag indicating whether the plot is 3D.
+
+        Returns:
+            - List[go.Trace]: List of Plotly traces for the cluster.
+        """
+        traces = []
+        if cluster_data.empty:
+            logger.debug(f"Skipping empty cluster: {cluster_id}")
+            return traces
+
+        # Determine visual properties based on whether the cluster is noise (-1) or a valid cluster.
+        is_noise = (cluster_id == -1)
+        opacity = 0.35 if is_noise else 0.75
+        symbol = 'circle'
+        size = 2 if is_noise else 4
+        legend_name = str(cluster_id) if not is_noise else 'Noise'
+        point_color = self.color_map.get(cluster_id, 'gray')
+
+        # Generate hover text for each point in the cluster.
+        hover_text = cluster_data.apply(self._generate_hover_text, axis=1)
+
+        # Extract coordinates from the 'reduced_vector' column.
+        x = cluster_data['reduced_vector'].apply(lambda v: v[0])
+        y = cluster_data['reduced_vector'].apply(lambda v: v[1])
+
+        if has_3d:
+            z = cluster_data['reduced_vector'].apply(lambda v: v[2])
+            scatter_trace = go.Scatter3d(
+                x=x,
+                y=y,
+                z=z,
+                mode='markers',
+                marker=dict(
+                    size=size,
+                    color=point_color,
+                    opacity=opacity,
+                    symbol=symbol,
+                    line=dict(color='rgba(0,0,0,0.2)', width=0.5)
+                ),
+                name=legend_name,
+                text=hover_text,
+                hoverinfo='text',
+                showlegend=True
+            )
+        else:
+            scatter_trace = go.Scatter(
+                x=x,
+                y=y,
+                mode='markers',
+                marker=dict(
+                    size=size,
+                    color=point_color,
+                    opacity=opacity,
+                    symbol=symbol,
+                    line=dict(color='rgba(0,0,0,0.2)', width=0.5)
+                ),
+                name=legend_name,
+                text=hover_text,
+                hoverinfo='text',
+                showlegend=True
+            )
+        traces.append(scatter_trace)
+
+        # For non-noise clusters, add a centroid annotation with the topic label.
+        if not is_noise:
+            if 'topic' in cluster_data.columns:
+                cluster_topic = cluster_data['topic'].mode().iloc[0]
+            else:
+                cluster_topic = f"Cluster {cluster_id}"
+            annotation_trace = self._create_centroid_annotation(cluster_data, has_3d, cluster_topic)
+            traces.append(annotation_trace)
+
+        return traces
+
+    def _get_layout(self, has_3d: bool) -> dict:
+        """
+        Configure layout settings for the scatter plot, including dark theme and legend settings.
+
+        Args:
+            - has_3d (bool): Flag indicating whether the plot is 3D.
+
+        Returns:
+            - dict: Dictionary of layout settings for the Plotly figure.
+        """
+        layout_args = dict(
+            title=dict(
+                text='Clusters',
+                x=0.5,
+                font=dict(size=24, color='white')
+            ),
+            plot_bgcolor='black',
+            paper_bgcolor='black',
+            showlegend=True,
+            height=1000,
+            margin=dict(l=0, r=120, t=50, b=0),
+            legend=dict(
+                x=1,
+                y=0.5,
+                xanchor='left',
+                font=dict(size=12, color='white')
+            ),
+            hoverlabel=dict(
+                bgcolor='rgba(0,0,0,0.8)',
+                font=dict(color='white', size=12),
+                align='left',
+                namelength=-1
+            )
+        )
+
+        if has_3d:
+            layout_args.update(dict(
+                scene=dict(
+                    xaxis=dict(showgrid=False, zeroline=False, visible=False),
+                    yaxis=dict(showgrid=False, zeroline=False, visible=False),
+                    zaxis=dict(showgrid=False, zeroline=False, visible=False),
+                    bgcolor='black',
+                    camera=dict(
+                        up=dict(x=0, y=0, z=1),
+                        center=dict(x=0, y=0, z=0),
+                        eye=dict(x=1.5, y=1.5, z=1.5)
+                    )
+                )
+            ))  # type: ignore
+        else:
+            layout_args.update(dict(
+                xaxis=dict(showgrid=False, zeroline=False, visible=False),
+                yaxis=dict(showgrid=False, zeroline=False, visible=False)
+            ))
+        return layout_args
+
+    def create_figure(self) -> go.Figure:
+        """
+        Generate the scatter (point cloud) plot as a Plotly Figure.
+
+        The function determines whether to plot in 2D or 3D based on the dimensionality of the 'reduced_vector'.
+        If the dimensionality is greater than 3, a placeholder figure with a warning annotation is returned.
+
+        Returns:
+            - go.Figure: Plotly Figure object representing the scatter plot.
+        """
+        logger.debug("Generating clusters point cloud plot.")
+        dim = self.dim
+        if dim > 3:
+            logger.warning("Cannot plot scatter plot with dims > 3... Skipping plot")
+            fig = go.Figure()
+            fig.add_annotation(
+                text=f"Data has dims={dim}. Cannot plot scatter plot with dims > 3. Skipping plot.",
+                showarrow=False,
+                xref="paper", yref="paper",
+                x=0.5, y=0.5,
+                font=dict(size=20, color="red")
+            )
+            return fig
+
+        has_3d = (dim == 3)
+        logger.debug(f"Detected {'3D' if has_3d else '2D'} plotting based on 'reduced_vector'.")
+
+        # Initialize an empty list for traces.
+        all_traces = []
+        # Iterate over each unique cluster and generate corresponding traces.
+        for cluster_id in sorted(self.clusters_df['cluster_id'].unique()):
+            cluster_data = self.clusters_df[self.clusters_df['cluster_id'] == cluster_id]
+            traces = self._create_cluster_trace(cluster_data, cluster_id, has_3d)
+            all_traces.extend(traces)
+
+        # Create the figure and add all traces.
+        fig = go.Figure(data=all_traces)
+        # Update layout settings.
+        layout_args = self._get_layout(has_3d)
+        fig.update_layout(**layout_args)  # type: ignore
+        logger.debug("Clusters point cloud plot created successfully.")
+        return fig
 
 
 # -------------------------------------------------------------------------
@@ -846,6 +962,44 @@ def bars_fig(clusters_df: pd.DataFrame) -> go.Figure:
         raise e
 
 
+def validate_scatter_params(
+    clusters_df: pd.DataFrame,
+    content_col_name: str,
+    wrap_width: int,
+    id_col_name
+) -> dict:
+    """
+    Validate parameters for the scatter_fig function.
+
+    Args:
+        clusters_df (pd.DataFrame): DataFrame containing clustering results.
+        content_col_name (str): Name of the column with textual content.
+        wrap_width (int): Maximum width for wrapping text in hover labels.
+        id_col_name: Optional column name for record IDs.
+
+    Raises:
+        ValueError: If content_col_name is not found in clusters_df.
+        ValueError: If id_col_name is provided but not found in clusters_df.
+
+    Returns:
+        int: A valid wrap_width value (ensuring it is at least 20).
+    """
+    if content_col_name not in clusters_df.columns:
+        raise ValueError(f"content_col_name '{content_col_name}' not found in clusters_df columns.")
+
+    if id_col_name is not None and id_col_name not in clusters_df.columns:
+        raise ValueError(f"id_col_name '{id_col_name}' not found in clusters_df columns.")
+
+    if wrap_width < 20:
+        logging.warning("wrap_width too small, defaulting to wrap_width=20")
+        wrap_width = 20
+
+    return {"wrap_width": wrap_width}
+
+#----------------------
+# scatter_fig Functional Interface
+#----------------------
+
 def scatter_fig(
     clusters_df: pd.DataFrame,
     content_col_name: str = 'content',
@@ -859,30 +1013,35 @@ def scatter_fig(
     For vectors with more than 3 dimensions, a warning is logged and a placeholder figure is returned.
 
     Args:
-        - clusters_df (pd.DataFrame): DataFrame containing clustering results with 'reduced_vector', 'cluster_id', and optionally 'topic'.
-        - content_col_name (str): Name of the column with textual content. Defaults to 'content'.
-        - wrap_width (int): Maximum width for wrapping text in hover labels. Defaults to 100.
-        - id_col_name: Optional column name for record IDs.
+        clusters_df (pd.DataFrame): DataFrame containing clustering results with 'reduced_vector', 'cluster_id', and optionally 'topic'.
+        content_col_name (str): Name of the column with textual content. Defaults to 'content'.
+        wrap_width (int): Maximum width for wrapping text in hover labels. Defaults to 100.
+        id_col_name: Optional column name for record IDs.
 
     Returns:
-        - go.Figure: Plotly Figure object representing the scatter (or point cloud) plot.
+        go.Figure: Plotly Figure object representing the scatter (or point cloud) plot.
     """
     try:
+        # Validate parameters first. Clunky code, but this also makes sure that wrap_width is at least 20.
+        wrap_width = validate_scatter_params(clusters_df, content_col_name, wrap_width, id_col_name)["wrap_width"]
+
         # -------------------------------
         # Instantiate PlotMaker and generate color mapping
         # -------------------------------
         logger.debug("Created PlotMaker instance in scatter_fig.")
         color_map = _color_map(clusters_df)
+        
         # -------------------------------
-        # Generate and return the scatter plot figure
+        # Use the ScatterPlot class to generate and return the scatter plot figure
         # -------------------------------
-        return _clusters_point_cloud_fig(
-            clusters_df=clusters_df, 
+        scatter_plot = ScatterPlot(
+            clusters_df=clusters_df,
             color_map=color_map,
             id_col_name=id_col_name,
             content_col_name=content_col_name,
             wrap_width=wrap_width
         )
+        return scatter_plot.create_figure()
     except Exception as e:
         logging.exception("Error generating scatter plot:")
         raise e

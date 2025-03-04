@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "atmose"
-version = "0.0.28"
+version = "0.0.38"
 description = "ATMOSE- Automatic Topic Modeling Over Semantic Embeddings"
 authors = ["Joe Nance <joe@nceno.app>"]
 license = "MIT"
@@ -31,6 +31,7 @@ pandas = "^2.2.2"
 langchain-openai = "0.3.0"
 langchain-core = "0.3.29"
 pytest = "^8.3.4"
+pytest-asyncio = "^0.25.3"
 
 [build-system]
 requires = ["poetry-core"]

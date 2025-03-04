@@ -53,7 +53,7 @@ class BranchDetectionConfig:
     Configuration parameters for branch detection in HDBSCAN.
     The branch min_cluster_size is now defined as a multiplier relative to the number of data points.
     """
-    enabled: bool = True
+    enabled: bool = False
     min_cluster_size_multiplier_min: float = 0.005
     min_cluster_size_multiplier_max: float = 0.025
     selection_persistence_min: float = 0.0
@@ -337,8 +337,7 @@ class ClusteringEngine:
         #----------------------
         # Start triple-objective evaluation.
         #----------------------
-        self.logger.debug("Starting triple-objective evaluation for trial number: %s",
-                          trial.number if hasattr(trial, 'number') else 'N/A')
+        self.logger.debug("Starting triple-objective evaluation for trial number: %s", trial.number if hasattr(trial, 'number') else 'N/A')
         try:
             #----------------------
             # Create models using trial-specific hyperparameters.
@@ -350,8 +349,7 @@ class ClusteringEngine:
             # Apply UMAP dimensionality reduction.
             #----------------------
             reduced_data = umap_model.fit_transform(embeddings)
-            self.logger.debug("UMAP reduction completed for trial %s",
-                              trial.number if hasattr(trial, 'number') else 'N/A')
+            self.logger.debug("UMAP reduction completed for trial %s", trial.number if hasattr(trial, 'number') else 'N/A')
             
             #----------------------
             # Run HDBSCAN clustering (with optional branch detection).
@@ -378,8 +376,7 @@ class ClusteringEngine:
             #----------------------
             metrics_result = self._compute_metrics(reduced_data=reduced_data, labels=labels)
             if metrics_result is None:
-                self.logger.debug("Metrics result invalid for trial %s; returning -inf objectives.",
-                                  trial.number if hasattr(trial, 'number') else 'N/A')
+                self.logger.debug("Metrics result invalid for trial %s; returning -inf objectives.", trial.number if hasattr(trial, 'number') else 'N/A')
                 return [float("-inf")] * 3
 
             s = metrics_result["silhouette"]
@@ -390,23 +387,20 @@ class ClusteringEngine:
             # Enforce noise ratio constraints.
             #----------------------
             if noise_ratio < self.min_noise_ratio or noise_ratio > self.max_noise_ratio:
-                self.logger.debug("Trial %s failed noise ratio constraints (noise_ratio=%.4f).",
-                                  trial.number if hasattr(trial, 'number') else 'N/A', noise_ratio)
+                self.logger.debug("Trial %s failed noise ratio constraints (noise_ratio=%.4f).", trial.number if hasattr(trial, 'number') else 'N/A', noise_ratio)
                 return [float("-inf")] * 3
             
             #----------------------
             # Compute number of clusters (excluding noise).
             #----------------------
             k = len(set(labels) - {-1})
-            self.logger.debug("Trial %s metrics: silhouette=%.4f, neg_noise=%.4f, clusters=%d",
-                              trial.number if hasattr(trial, 'number') else 'N/A', s, neg_noise, k)
+            self.logger.debug("Trial %s metrics: silhouette=%.4f, neg_noise=%.4f, clusters=%d", trial.number if hasattr(trial, 'number') else 'N/A', s, neg_noise, k)
             
             #----------------------
             # Enforce cluster count constraints.
             #----------------------
             if k < self.min_clusters or k > self.max_clusters:
-                self.logger.debug("Trial %s failed cluster count constraints (k=%d).",
-                                  trial.number if hasattr(trial, 'number') else 'N/A', k)
+                self.logger.debug("Trial %s failed cluster count constraints (k=%d).", trial.number if hasattr(trial, 'number') else 'N/A', k)
                 return [float("-inf")] * 3
             
             neg_k = -k  # Fewer clusters is better.
@@ -418,18 +412,31 @@ class ClusteringEngine:
     def _run_optuna(self, embeddings, num_data_pts):
         """
         Run Optuna hyperparameter optimization and return the study.
+        This version includes a callback that logs a message every time a trial is completed.
+        The log indicates both the total number of solutions and the number of Pareto-optimal ones.
         """
-        #----------------------
-        # Create an Optuna study for multi-objective optimization.
-        #----------------------
         study = optuna.create_study(
             directions=["maximize", "maximize", "maximize"],
             sampler=optuna.samplers.NSGAIISampler(seed=self.random_state),
         )
         self.logger.debug("Optuna study created with multi-objective directions.")
-        total_trials = 0
+        
         #----------------------
-        # Run optimization trials in batches until the desired number of Pareto-optimal solutions is reached or max_trials is hit.
+        # Define a callback to log trial results after each trial.
+        #----------------------
+        def logging_callback(study, trial):
+            total_solutions = len(study.trials)
+            # Only count trials with valid (non -inf) objective values as valid solutions.
+            pareto_trials = [t for t in study.best_trials if not any(math.isinf(x) for x in t.values)]
+            pareto_count = len(pareto_trials)
+            # Check if the current trial is in the current Pareto front.
+            if trial in pareto_trials:
+                self.logger.info("Pareto-optimal solution found!\n%d solutions found total.\n%d pareto-optimal", total_solutions, pareto_count)
+
+        total_trials = 0
+        
+        #----------------------
+        # Run optimization in batches until we reach the desired number of Pareto-optimal solutions or max_trials.
         #----------------------
         while total_trials < self.max_trials:
             remaining_trials = min(self.trials_per_batch, self.max_trials - total_trials)
@@ -439,6 +446,7 @@ class ClusteringEngine:
                 n_trials=remaining_trials,
                 n_jobs=self.optuna_jobs,
                 show_progress_bar=True,
+                callbacks=[logging_callback],
             )
             total_trials = len(study.trials)
             self.logger.debug("Total trials completed: %d", total_trials)
@@ -451,6 +459,7 @@ class ClusteringEngine:
                 self.logger.debug("Desired number of Pareto-optimal solutions not reached yet. Continuing trials.")
         self.logger.debug("Optuna optimization completed with a total of %d trials.", total_trials)
         return study
+
 
     def _euclidean_distance_3d(self, x1, y1, z1, x2, y2, z2) -> float:
         """
@@ -467,11 +476,10 @@ class ClusteringEngine:
         # Calculate the Euclidean distance using the standard 3D distance formula.
         #----------------------
         distance = math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2 + (z1 - z2) ** 2)
-        self.logger.debug("Computed Euclidean distance between (%.4f, %.4f, %.4f) and (%.4f, %.4f, %.4f): %.4f",
-                          x1, y1, z1, x2, y2, z2, distance)
+        self.logger.debug("Computed Euclidean distance between (%.4f, %.4f, %.4f) and (%.4f, %.4f, %.4f): %.4f", x1, y1, z1, x2, y2, z2, distance)
         return distance
 
-    def _get_best_solution(self, study, pareto_trials):
+    def _get_best_solution(self, pareto_trials):
         """
         Select the best trial from the Pareto optimal solutions using the TOPSIS method.
 
@@ -527,8 +535,7 @@ class ClusteringEngine:
                 sil_norm = norm_factor(sil_vals)
                 noise_norm = norm_factor(noise_vals)
                 k_norm = norm_factor(k_vals)
-                self.logger.info("Normalization factors: sil_norm=%.4f, noise_norm=%.4f, k_norm=%.4f",
-                                 sil_norm, noise_norm, k_norm)
+                self.logger.info("Normalization factors: sil_norm=%.4f, noise_norm=%.4f, k_norm=%.4f", sil_norm, noise_norm, k_norm)
 
                 #----------------------
                 # Normalize each trial's metrics.
@@ -555,8 +562,7 @@ class ClusteringEngine:
                 anti_s = min(s_norm_vals)
                 anti_n = min(n_norm_vals)
                 anti_k = min(k_norm_vals)
-                self.logger.info("Ideal values: (%.4f, %.4f, %.4f), Anti-ideal values: (%.4f, %.4f, %.4f)",
-                                 ideal_s, ideal_n, ideal_k, anti_s, anti_n, anti_k)
+                self.logger.info("Ideal values: (%.4f, %.4f, %.4f), Anti-ideal values: (%.4f, %.4f, %.4f)", ideal_s, ideal_n, ideal_k, anti_s, anti_n, anti_k)
 
                 #----------------------
                 # Compute TOPSIS scores for each trial.
@@ -656,8 +662,7 @@ class ClusteringEngine:
         #----------------------
         # Start PCA preprocessing.
         #----------------------
-        self.logger.info("Starting PCA preprocessing with binary search to achieve an explained variance ratio >= %.2f",
-                         self.pca_config.target_evr if self.pca_config.target_evr is not None else 0)
+        self.logger.info("Starting PCA preprocessing with binary search to achieve an explained variance ratio >= %.2f", self.pca_config.target_evr if self.pca_config.target_evr is not None else 0)
         X = np.vstack(df[self.embedding_col_name].values)  # type: ignore
         orig_dim = X.shape[1]
         n_samples = X.shape[0]
@@ -668,8 +673,7 @@ class ClusteringEngine:
         #----------------------
         high = min(orig_dim, n_samples)
         if orig_dim > n_samples:
-            self.logger.info("Data dimensionality %d exceeds number of samples %d. PCA optimization will only search for a reduced dimension between 1 and %d. If you can, try running again with more data points.", 
-                             orig_dim, n_samples, high)
+            self.logger.info("Data dimensionality %d exceeds number of samples %d. PCA optimization will only search for a reduced dimension between 1 and %d. If you can, try running again with more data points.", orig_dim, n_samples, high)
 
         #----------------------
         # Set search bounds and initialize best_n_components.
@@ -711,8 +715,7 @@ class ClusteringEngine:
         # Transform the data using the fitted PCA model.
         #----------------------
         X_reduced = pca_model.transform(X)
-        self.logger.info("PCA preprocessing complete: selected n_components=%d with EVR=%.4f",
-                         best_n_components, evr_final)
+        self.logger.info("PCA preprocessing complete: selected n_components=%d with EVR=%.4f", best_n_components, evr_final)
         #----------------------
         # Replace the embedding column with PCA-reduced vectors.
         #----------------------
@@ -820,14 +823,24 @@ class ClusteringEngine:
                 cluster_indices = np.where(final_labels == label)[0]
                 if len(cluster_indices) == 0:
                     continue
-                cluster_outlier_scores = outlier_scores_final[cluster_indices]
-                threshold = np.percentile(cluster_outlier_scores, self.hdbscan_config.outlier_threshold)
-                self.logger.info("Cluster %s: computed outlier score threshold %.4f", label, threshold)
-                core_flags[cluster_indices] = cluster_outlier_scores < threshold
+                # Invert outlier scores so that higher values indicate more central points
+                centrality = -outlier_scores_final[cluster_indices]
+                threshold = np.percentile(centrality, 100 - self.hdbscan_config.outlier_threshold)
+                self.logger.info("Cluster %s: computed centrality threshold %.4f", label, threshold)
+                core_flags[cluster_indices] = centrality >= threshold
+
             # Explicitly mark noise points as non-core.
             noise_indices = np.where(final_labels == -1)[0]
             core_flags[noise_indices] = False
             branch_detector_final = None
+            
+        # Check for clusters without core points and raise a warning.
+        for label in np.unique(final_labels):
+            if label == -1:
+                continue  # Skip noise cluster
+            cluster_indices = np.where(final_labels == label)[0]
+            if not core_flags[cluster_indices].any():
+                self.logger.warning("WARNING: outlier_threshold of %s resulted in Cluster %s having no core points after clustering. Labeling will FAIL if you try to label this dataframe. Consider re-running with higher outlier_threshold.", self.hdbscan_config.outlier_threshold, label)
         
         #----------------------
         # Return final clustering results and BranchDetector instance.
@@ -973,7 +986,7 @@ class ClusteringEngine:
                 dims_final = umap_params["n_components"]
                 best_trial = None
             else:
-                best_trial, method_used = self._get_best_solution(study, pareto_trials)
+                best_trial, method_used = self._get_best_solution(pareto_trials)
                 self.logger.info("Solution selection method: %s", method_used)
                 s_val, neg_noise_val, neg_k_val = best_trial.values
                 self.logger.info("\n*** Final Chosen Trial ***")
@@ -1067,6 +1080,175 @@ class ClusteringEngine:
             self.logger.error("An error occurred during clustering optimization: %s", str(e))
             raise
 
+def validate_user_params(
+    filtered_df: pd.DataFrame,
+    # Clustering engine parameters:
+    min_clusters,
+    max_clusters,
+    trials_per_batch,
+    min_pareto_solutions,
+    max_trials,
+    random_state,
+    embedding_col_name,
+    min_noise_ratio,
+    max_noise_ratio,
+    optuna_jobs,
+    # UMAP configuration parameters:
+    umap_n_neighbors_min,
+    umap_n_neighbors_max,
+    umap_min_dist_min,
+    umap_min_dist_max,
+    umap_spread_min,
+    umap_spread_max,
+    umap_learning_rate_min,
+    umap_learning_rate_max,
+    umap_min_dims,
+    umap_max_dims,
+    umap_metric,
+    dims,
+    # HDBSCAN configuration parameters:
+    hdbscan_min_cluster_size_multiplier_min,
+    hdbscan_min_cluster_size_multiplier_max,
+    hdbscan_min_samples_min,
+    hdbscan_min_samples_max,
+    hdbscan_epsilon_min,
+    hdbscan_epsilon_max,
+    hdbscan_metric,
+    hdbscan_cluster_selection_method,
+    hdbscan_outlier_threshold,
+    # PCA configuration:
+    target_pca_evr,
+    # Branch detection configuration:
+    hdbscan_branch_detection,
+    branch_min_cluster_size_multiplier_min,
+    branch_min_cluster_size_multiplier_max,
+    branch_selection_persistence_min,
+    branch_selection_persistence_max,
+    branch_label_sides_as_branches
+):
+    """
+    Validate that all provided user parameters are of the expected types and within
+    acceptable ranges. Raises a ValueError with an informative message if any
+    parameter is invalid.
+    
+    This version additionally checks that:
+      - filtered_df is a non-empty pandas DataFrame.
+      - The required embedding column exists: if the user provides an embedding_col_name,
+        it must exist in filtered_df; otherwise, the column 'embedding_vector' must exist.
+    """
+
+    # Validate filtered_df
+    if not isinstance(filtered_df, pd.DataFrame):
+        raise ValueError("filtered_df must be a pandas DataFrame.")
+    if filtered_df.empty:
+        raise ValueError("Input DataFrame is empty.")
+
+    # Validate embedding column existence
+    if embedding_col_name is not None:
+        if not isinstance(embedding_col_name, str) or not embedding_col_name:
+            raise ValueError("embedding_col_name must be a non-empty string if provided.")
+        if embedding_col_name not in filtered_df.columns:
+            raise ValueError(f"Input DataFrame must contain a column named '{embedding_col_name}'.")
+    else:
+        if "embedding_vector" not in filtered_df.columns:
+            raise ValueError("Input DataFrame must contain a column named 'embedding_vector' if embedding_col_name is None.")
+
+    # Validate clustering engine parameters:
+    if not isinstance(min_clusters, int) or min_clusters < 1:
+        raise ValueError("min_clusters must be an integer greater than or equal to 1")
+    if not isinstance(max_clusters, int) or max_clusters < min_clusters:
+        raise ValueError("max_clusters must be an integer greater than or equal to min_clusters")
+    if not isinstance(trials_per_batch, int) or trials_per_batch < 1:
+        raise ValueError("trials_per_batch must be a positive integer")
+    if not isinstance(min_pareto_solutions, int) or min_pareto_solutions < 1:
+        raise ValueError("min_pareto_solutions must be a positive integer")
+    if not isinstance(max_trials, int) or max_trials < 1:
+        raise ValueError("max_trials must be a positive integer")
+    if not isinstance(random_state, int):
+        raise ValueError("random_state must be an integer")
+    if not isinstance(embedding_col_name, str) or not embedding_col_name:
+        raise ValueError("embedding_col_name must be a non-empty string")
+    
+    # Validate noise ratio parameters (assuming values between 0 and 1 are acceptable):
+    if not isinstance(min_noise_ratio, (int, float)) or not (0 <= min_noise_ratio <= 1):
+        raise ValueError("min_noise_ratio must be a number between 0 and 1")
+    if not isinstance(max_noise_ratio, (int, float)) or not (0 <= max_noise_ratio <= 1):
+        raise ValueError("max_noise_ratio must be a number between 0 and 1")
+    if min_noise_ratio > max_noise_ratio:
+        raise ValueError("min_noise_ratio must be less than or equal to max_noise_ratio")
+    if not isinstance(optuna_jobs, int):
+        raise ValueError("optuna_jobs must be an integer (e.g., -1 for all processors or a positive value)")
+
+    # Validate UMAP parameters:
+    if not isinstance(umap_n_neighbors_min, int) or umap_n_neighbors_min < 1:
+        raise ValueError("umap_n_neighbors_min must be an integer greater than or equal to 1")
+    if not isinstance(umap_n_neighbors_max, int) or umap_n_neighbors_max < umap_n_neighbors_min:
+        raise ValueError("umap_n_neighbors_max must be an integer greater than or equal to umap_n_neighbors_min")
+    if not isinstance(umap_min_dist_min, (int, float)) or umap_min_dist_min < 0:
+        raise ValueError("umap_min_dist_min must be a non-negative number")
+    if not isinstance(umap_min_dist_max, (int, float)) or umap_min_dist_max < umap_min_dist_min:
+        raise ValueError("umap_min_dist_max must be a number greater than or equal to umap_min_dist_min")
+    if not isinstance(umap_spread_min, (int, float)) or umap_spread_min <= 0:
+        raise ValueError("umap_spread_min must be a positive number")
+    if not isinstance(umap_spread_max, (int, float)) or umap_spread_max < umap_spread_min:
+        raise ValueError("umap_spread_max must be a number greater than or equal to umap_spread_min")
+    if not isinstance(umap_learning_rate_min, (int, float)) or umap_learning_rate_min <= 0:
+        raise ValueError("umap_learning_rate_min must be a positive number")
+    if not isinstance(umap_learning_rate_max, (int, float)) or umap_learning_rate_max < umap_learning_rate_min:
+        raise ValueError("umap_learning_rate_max must be a number greater than or equal to umap_learning_rate_min")
+    if not isinstance(umap_min_dims, int) or umap_min_dims < 2:
+        raise ValueError("umap_min_dims must be an integer greater than or equal to 2")
+    if not isinstance(umap_max_dims, int) or umap_max_dims < umap_min_dims:
+        raise ValueError("umap_max_dims must be an integer greater than or equal to umap_min_dims")
+    if not isinstance(umap_metric, str) or not umap_metric:
+        raise ValueError("umap_metric must be a non-empty string")
+    if not isinstance(dims, int) or dims < 1:
+        if dims is not None:
+            raise ValueError("dims must be a positive integer")
+
+    # Validate HDBSCAN parameters:
+    if not isinstance(hdbscan_min_cluster_size_multiplier_min, (int, float)) or hdbscan_min_cluster_size_multiplier_min <= 0:
+        raise ValueError("hdbscan_min_cluster_size_multiplier_min must be a positive number")
+    if not isinstance(hdbscan_min_cluster_size_multiplier_max, (int, float)) or hdbscan_min_cluster_size_multiplier_max < hdbscan_min_cluster_size_multiplier_min:
+        raise ValueError("hdbscan_min_cluster_size_multiplier_max must be a number greater than or equal to hdbscan_min_cluster_size_multiplier_min")
+    if not isinstance(hdbscan_min_samples_min, int) or hdbscan_min_samples_min < 1:
+        raise ValueError("hdbscan_min_samples_min must be an integer greater than or equal to 1")
+    if not isinstance(hdbscan_min_samples_max, int) or hdbscan_min_samples_max < hdbscan_min_samples_min:
+        raise ValueError("hdbscan_min_samples_max must be an integer greater than or equal to hdbscan_min_samples_min")
+    if not isinstance(hdbscan_epsilon_min, (int, float)) or hdbscan_epsilon_min < 0:
+        raise ValueError("hdbscan_epsilon_min must be a non-negative number")
+    if not isinstance(hdbscan_epsilon_max, (int, float)) or hdbscan_epsilon_max < hdbscan_epsilon_min:
+        raise ValueError("hdbscan_epsilon_max must be a number greater than or equal to hdbscan_epsilon_min")
+    if not isinstance(hdbscan_metric, str) or not hdbscan_metric:
+        raise ValueError("hdbscan_metric must be a non-empty string")
+    if not isinstance(hdbscan_cluster_selection_method, str) or not hdbscan_cluster_selection_method:
+        raise ValueError("hdbscan_cluster_selection_method must be a non-empty string")
+    if not isinstance(hdbscan_outlier_threshold, int) or hdbscan_outlier_threshold < 0:
+        raise ValueError("hdbscan_outlier_threshold must be a non-negative integer")
+
+    # Validate PCA parameter:
+    if not isinstance(target_pca_evr, (int, float)) or not (0 < target_pca_evr <= 1):
+        raise ValueError("target_pca_evr must be a number between 0 (exclusive) and 1 (inclusive)")
+
+    # Validate branch detection parameters:
+    if not isinstance(hdbscan_branch_detection, bool):
+        raise ValueError("hdbscan_branch_detection must be a boolean")
+    if not isinstance(branch_min_cluster_size_multiplier_min, (int, float)) or branch_min_cluster_size_multiplier_min <= 0:
+        raise ValueError("branch_min_cluster_size_multiplier_min must be a positive number")
+    if not isinstance(branch_min_cluster_size_multiplier_max, (int, float)) or branch_min_cluster_size_multiplier_max < branch_min_cluster_size_multiplier_min:
+        raise ValueError("branch_min_cluster_size_multiplier_max must be a number greater than or equal to branch_min_cluster_size_multiplier_min")
+    if not isinstance(branch_selection_persistence_min, (int, float)) or branch_selection_persistence_min < 0:
+        raise ValueError("branch_selection_persistence_min must be a non-negative number")
+    if not isinstance(branch_selection_persistence_max, (int, float)) or branch_selection_persistence_max < branch_selection_persistence_min:
+        raise ValueError("branch_selection_persistence_max must be a number greater than or equal to branch_selection_persistence_min")
+    if not isinstance(branch_label_sides_as_branches, bool):
+        raise ValueError("branch_label_sides_as_branches must be a boolean")
+
+    # If no exception was raised, all validations have passed.
+    return True
+
+
+
 #----------------------
 # run_clustering Functional Interface
 #----------------------
@@ -1109,7 +1291,7 @@ def run_clustering(
     # PCA configuration:
     target_pca_evr=0.9,
     # Branch detection configuration:
-    hdbscan_branch_detection=True,
+    hdbscan_branch_detection=False,
     branch_min_cluster_size_multiplier_min=0.005,
     branch_min_cluster_size_multiplier_max=0.025,
     branch_selection_persistence_min=0.0,
@@ -1153,6 +1335,48 @@ def run_clustering(
             - 'branch_detector': The fitted BranchDetector if branch detection is enabled, else None.
     """
     try:
+        # Validate parameters first
+        validate_user_params(
+            filtered_df,
+            min_clusters,
+            max_clusters,
+            trials_per_batch,
+            min_pareto_solutions,
+            max_trials,
+            random_state,
+            embedding_col_name,
+            min_noise_ratio,
+            max_noise_ratio,
+            optuna_jobs,
+            umap_n_neighbors_min,
+            umap_n_neighbors_max,
+            umap_min_dist_min,
+            umap_min_dist_max,
+            umap_spread_min,
+            umap_spread_max,
+            umap_learning_rate_min,
+            umap_learning_rate_max,
+            umap_min_dims,
+            umap_max_dims,
+            umap_metric,
+            dims,
+            hdbscan_min_cluster_size_multiplier_min,
+            hdbscan_min_cluster_size_multiplier_max,
+            hdbscan_min_samples_min,
+            hdbscan_min_samples_max,
+            hdbscan_epsilon_min,
+            hdbscan_epsilon_max,
+            hdbscan_metric,
+            hdbscan_cluster_selection_method,
+            hdbscan_outlier_threshold,
+            target_pca_evr,
+            hdbscan_branch_detection,
+            branch_min_cluster_size_multiplier_min,
+            branch_min_cluster_size_multiplier_max,
+            branch_selection_persistence_min,
+            branch_selection_persistence_max,
+            branch_label_sides_as_branches
+        )
         #----------------------
         # Log function entry.
         #----------------------

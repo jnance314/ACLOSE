@@ -4,6 +4,7 @@ Automatic Clustering and Labeling Of Semantic Embeddings
 
 ## What it does
 This package is a tool for quick EDA of emergent topics among your semantic embeddings.
+
 ### Problem
 - I have all these embedding vectors of text documents. What are the general topics present in the text corpus?
 ### Solution

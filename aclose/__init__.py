@@ -4,4 +4,4 @@ from .plotting import silhouette_fig, scatter_fig, bars_fig
 
 __all__ = ['run_clustering', 'add_labels', 'silhouette_fig', 'scatter_fig', 'bars_fig']
 
-__version__ = '0.0.38'
+__version__ = '0.0.1'

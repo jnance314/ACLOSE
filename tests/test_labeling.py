@@ -5,7 +5,7 @@ import pandas as pd
 import asyncio
 import logging
 
-from atmose.labeling import (
+from aclose.labeling import (
     LabelingEngine,
     add_labels,
     validate_labeling_params,

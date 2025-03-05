@@ -8,7 +8,7 @@ import hdbscan
 import optuna
 
 # Import the clustering package components.
-from atmose.clustering import (
+from aclose.clustering import (
     ClusteringEngine,
     run_clustering,
     UMAPConfig,

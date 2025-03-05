@@ -924,10 +924,10 @@ def silhouette_fig(clustered_df: pd.DataFrame) -> go.Figure:
     """
     try:
         # -------------------------------
-        # Instantiate PlotMaker and generate color mapping
+        # Generate color mapping
         # -------------------------------
-        logger.debug("Created PlotMaker instance in silhouette_fig.")
         color_map = _color_map(clustered_df)
+        
         # -------------------------------
         # Generate and return the silhouette plot figure
         # -------------------------------
@@ -949,10 +949,10 @@ def bars_fig(clusters_df: pd.DataFrame) -> go.Figure:
     """
     try:
         # -------------------------------
-        # Instantiate PlotMaker and generate color mapping
+        # Generate color mapping
         # -------------------------------
-        logger.debug("Created PlotMaker instance in bars_fig.")
         color_map = _color_map(clusters_df)
+        
         # -------------------------------
         # Generate and return the bar chart figure
         # -------------------------------
@@ -979,10 +979,10 @@ def validate_scatter_params(
 
     Raises:
         ValueError: If content_col_name is not found in clusters_df.
-        ValueError: If id_col_name is provided but not found in clusters_df.
+        ValueError: If id_col_name is provided but not found in clusters_df columns.
 
     Returns:
-        int: A valid wrap_width value (ensuring it is at least 20).
+        dict: A dictionary with the key 'wrap_width' mapping to the validated wrap_width value (ensuring it is at least 20).
     """
     if content_col_name not in clusters_df.columns:
         raise ValueError(f"content_col_name '{content_col_name}' not found in clusters_df columns.")
@@ -1026,9 +1026,8 @@ def scatter_fig(
         wrap_width = validate_scatter_params(clusters_df, content_col_name, wrap_width, id_col_name)["wrap_width"]
 
         # -------------------------------
-        # Instantiate PlotMaker and generate color mapping
+        # Generate color mapping
         # -------------------------------
-        logger.debug("Created PlotMaker instance in scatter_fig.")
         color_map = _color_map(clusters_df)
         
         # -------------------------------

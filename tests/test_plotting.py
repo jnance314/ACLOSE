@@ -4,7 +4,7 @@ import numpy as np
 import logging
 import plotly.graph_objects as go
 
-from atmose.plotting import (
+from aclose.plotting import (
     silhouette_fig,
     bars_fig,
     scatter_fig,

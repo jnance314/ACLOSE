@@ -201,6 +201,7 @@ class ClusteringEngine:
         """
         Create UMAP and HDBSCAN models using a set of predefined default hyperparameters.
         This fallback is used when optimization fails to find any valid Pareto-optimal trials.
+        Note: In the default HDBSCAN parameters, branch detection data is always enabled.
 
         Args:
             num_data_pts (int): Number of data points in the dataset.
@@ -481,7 +482,7 @@ class ClusteringEngine:
 
     def _get_best_solution(self, pareto_trials):
         """
-        Select the best trial from the Pareto optimal solutions using the TOPSIS method.
+        Select the best trial from the Pareto-optimal solutions using the TOPSIS method.
 
         The Technique for Order Preference by Similarity to Ideal Solution (TOPSIS) is applied on the Pareto front.
         Each trial's metrics (silhouette, negative noise, and negative number of clusters) are normalized,
@@ -489,7 +490,6 @@ class ClusteringEngine:
         score is selected.
 
         Args:
-            study (optuna.study.Study): The Optuna study containing all trials.
             pareto_trials (list): List of Pareto-optimal trials with valid metric values.
 
         Returns:
@@ -498,7 +498,7 @@ class ClusteringEngine:
                 - str: A string indicating the selection method ("pareto_topsis").
 
         Raises:
-            ValueError: If no valid Pareto optimal solutions are found.
+            ValueError: If no valid Pareto-optimal solutions are found.
         """
         #----------------------
         # Log the number of Pareto-optimal trials.
@@ -649,14 +649,14 @@ class ClusteringEngine:
         Preprocess the DataFrame using PCA to reduce the dimensionality of the embedding vectors.
         This method uses a binary search to find the smallest number of PCA components such that
         the cumulative explained variance ratio is at least the threshold defined by pca_config.target_evr.
-        The original embedding column (specified by self.embedding_col_name) is then replaced with the PCA-reduced vectors.
+        The original embedding column (specified by self.embedding_col_name) is replaced with the PCA-reduced vectors.
 
         Args:
             df (pd.DataFrame): A copy of the original DataFrame containing the embedding vectors.
 
         Returns:
             dict: A dictionary containing:
-                - 'df': The DataFrame with the embedding column replaced by PCA-reduced vectors.
+                - 'pcd_reduced_df': The DataFrame with the embedding column replaced by PCA-reduced vectors.
                 - 'pca_model': The fitted PCA model, or None if no suitable dimension was found.
         """
         #----------------------

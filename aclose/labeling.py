@@ -160,21 +160,23 @@ class LabelingEngine:
     
     def _make_model_args(self, system_prompt, core_points, other_centroids, core_label, peripheral_points, func):
         """
-        Create a dictionary of model arguments for making API requests.
-    
-        This method constructs the payload for the API call to the language model, including the system prompt,
-        a list of core texts, and texts from centroids of other clusters. If tracing is enabled, additional headers are added.
-    
+        Construct the model arguments for an API call to generate or refine a topic label.
+        
+        This method builds a payload dictionary for the language model API based on the provided system prompt,
+        core texts, and centroid texts from other clusters. When `func` is 'topic-label-pass-1', only `core_points` 
+        and `other_centroids` are used. When `func` is 'topic-label-pass-2', the `core_label` and `peripheral_points` are
+        also incorporated to refine the initial label. If Helicone tracing is enabled, appropriate tracing headers are added.
+        
         Args:
             system_prompt (str): The system prompt detailing the task and instructions.
-            core_points (list[str]): List of core point texts from the target cluster.
+            core_points (list[str]): List of core texts from the target cluster.
             other_centroids (list[str]): List of centroid texts from other clusters.
-            core_label (str): The initial topic label generated from core texts.
-            peripheral_points (list[str]): List of peripheral point texts from the target cluster.
-            func (str): Identifier for the function or operation making the request, used in tracing headers.
-    
+            core_label (str or None): The initial topic label (used only for label refinement).
+            peripheral_points (list or None): List of peripheral texts (used only for label refinement).
+            func (str): Identifier for the API call type ('topic-label-pass-1' or 'topic-label-pass-2').
+        
         Returns:
-            dict: Dictionary of arguments to be passed to the LLM API.
+            dict: The dictionary of model arguments tailored for the specified API call.
         """
         self.logger.debug("Building model arguments for API call.")
         
@@ -243,20 +245,22 @@ class LabelingEngine:
         other_centroids: list
         ) -> str|None:
         """
-        Assign a topic label to a cluster based on its core points.
-    
-        This asynchronous method interacts with the language model to generate an initial topic label for a cluster,
-        using the provided core texts and centroid texts from other clusters.
-    
+        Generate an initial topic label for a cluster using its core points.
+        
+        This asynchronous method calls the language model to produce an initial topic label based on a list of 
+        core texts from the target cluster and centroid texts from other clusters for contrast. It raises a 
+        ValueError if either `core_points` or `other_centroids` is empty.
+        
         Args:
             core_points (list[str]): List of core texts from the target cluster.
             other_centroids (list[str]): List of centroid texts from other clusters.
-    
+        
         Returns:
             str: The final topic label as determined by the language model.
-    
+        
         Raises:
-            Exception: If the response cannot be processed after the maximum number of retry attempts.
+            ValueError: If `core_points` or `other_centroids` is empty.
+            Exception: If the API call fails after the maximum number of retry attempts.
         """
         # raise exception if core_points or other_centroids is empty
         if not core_points:
@@ -349,22 +353,25 @@ class LabelingEngine:
         other_centroids: list
     ) -> str|None:
         """
-        Refine the initial topic label using peripheral texts.
-    
-        This asynchronous method refines an existing topic label by incorporating information from peripheral texts,
-        while still considering the core texts and centroid texts from other clusters for context.
-    
+        Refine an existing topic label by incorporating peripheral texts.
+        
+        This asynchronous method refines the initial topic label by taking into account both the core texts and a 
+        stratified sample of peripheral texts from the target cluster, along with centroid texts from other clusters 
+        for additional context. It raises a ValueError if any of the required inputs (`core_points`, `core_label`, 
+        `peripheral_points`, or `other_centroids`) are empty.
+        
         Args:
             core_points (list[str]): List of core texts from the target cluster.
             core_label (str): The initial topic label generated from core texts.
             peripheral_points (list[str]): List of peripheral texts from the target cluster.
             other_centroids (list[str]): List of centroid texts from other clusters.
-    
+        
         Returns:
-            str: The updated final topic label.
-    
+            str: The refined topic label as determined by the language model.
+        
         Raises:
-            Exception: If the response cannot be processed after the maximum number of retry attempts.
+            ValueError: If any of the required arguments is empty.
+            Exception: If the API call fails after the maximum number of retry attempts.
         """
         self.logger.info("Refining initial topic...")
         # raise exception if any of necessary args are empty

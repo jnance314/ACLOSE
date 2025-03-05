@@ -1,13 +1,13 @@
 [tool.poetry]
-name = "atmose"
-version = "0.0.38"
-description = "ATMOSE- Automatic Topic Modeling Over Semantic Embeddings"
+name = "aclose"
+version = "0.0.1"
+description = "ACLOSE- Automatic Clustering and Labeling Over Semantic Embeddings"
 authors = ["Joe Nance <joe@nceno.app>"]
 license = "MIT"
 readme = "README.md"
 
 [[tool.poetry.packages]]
-include = "atmose"
+include = "aclose"
 
 [tool.poetry.dependencies]
 python = "^3.10"

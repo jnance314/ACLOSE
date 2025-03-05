@@ -1,31 +1,23 @@
-# ATMOSE
-ATMOSE- Automatic Topic Modeling Over Semantic Embeddings
+# ACLOSE
+Automatic Clustering and Labeling Of Semantic Embeddings
 
 
 ## What it does
 This package is a tool for quick EDA of emergent topics among your semantic embeddings.
 ### Problem
-- I have all these embedding vectors. What are the general topics that emerge from them?
+- I have all these embedding vectors of text documents. What are the general topics present in the text corpus?
 ### Solution
-- ATMOSE will cluster your embeddings and then label the clusters using an LLM.
-- Instead of throwing a random sample of embeddings from each cluster at an LLM, ATMOSE uses stratified sampling and refinement to ensure that the topic labels balance generalization and specificity.
+- ACLOSE will cluster your embeddings and then label the clusters using an LLM.
+- Instead of throwing a random sample of embeddings from each cluster at an LLM, ACLOSE uses stratified sampling and refinement to ensure that the topic labels balance generalization and specificity.
 
-## Algorithms (more coming soon)
+## Algorithms
+- PCA
 - UMAP
 - HDBSCAN
-- TOPSIS
-
-## LLM agnostic (coming soon)
-- All LLMs are supported via LiteLLM
-
-## Experiment tracking (coming soon)
-- MLflow
-- Dim reduction and clustering Model serialization and versioning
-- Helicone tracking (optional)
 
 ## C++ compiler required
 
-Before installing ATMOSE, ensure you have:
+ACLOSE uses UMAP, which requires a c++ compiler to run. Before installing ACLOSE, ensure you have:
 
 - Windows: Microsoft Visual C++ Build Tools
 
@@ -55,13 +47,16 @@ ENV PATH="/root/.local/bin:$PATH"
 ```
 
 ## Notebook demo
-
+[Colab notebook with three example uses](https://colab.research.google.com/drive/1UsXnxj2aT2VmL7HP2QiAbvJJk_n-eIhr?usp=sharing)
 
 ## Quickstart
-
+```python
+pip install aclose
+```
 
 ## Number of LLM calls
 - 2 LLM calls per cluster
+- User can choose the model
 
 
 ## Instructions for use

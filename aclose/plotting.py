@@ -10,10 +10,7 @@ from typing import List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 
-def _color_map(
-        df: pd.DataFrame,
-        color_palette=px.colors.qualitative.Alphabet
-    ) -> dict:
+def _color_map(df: pd.DataFrame, color_palette=px.colors.qualitative.Alphabet) -> dict:
     """
     Create a mapping from each cluster ID to a color from the specified palette.
 
@@ -31,7 +28,7 @@ def _color_map(
     # -------------------------------
     # Validate input DataFrame contains required column
     # -------------------------------
-    if 'cluster_id' not in df.columns:
+    if "cluster_id" not in df.columns:
         logger.error("DataFrame does not contain 'cluster_id' column.")
         raise ValueError("DataFrame must contain 'cluster_id' column.")
 
@@ -75,38 +72,39 @@ def _prepare_topic_counts(clusters_df: pd.DataFrame) -> pd.DataFrame:
     # -------------------------------
     # Validate DataFrame contains the required 'cluster_id' column
     # -------------------------------
-    if 'cluster_id' not in clusters_df.columns:
+    if "cluster_id" not in clusters_df.columns:
         logger.error("DataFrame does not contain 'cluster_id' column.")
         raise ValueError("DataFrame must contain 'cluster_id' column.")
 
     # -------------------------------
     # Filter out noise cluster (-1) from the data
     # -------------------------------
-    topic_df = clusters_df[clusters_df['cluster_id'] != -1].copy()
+    topic_df = clusters_df[clusters_df["cluster_id"] != -1].copy()
     logger.debug(f"Filtered DataFrame shape (excluding noise): {topic_df.shape}")
 
     # -------------------------------
     # Group the data to count topics per cluster, handling missing 'topic' column
     # -------------------------------
-    if 'topic' in topic_df.columns:
-        topic_counts = topic_df.groupby(['cluster_id', 'topic']).size().reset_index(name='count')
+    if "topic" in topic_df.columns:
+        topic_counts = (
+            topic_df.groupby(["cluster_id", "topic"]).size().reset_index(name="count")
+        )
     else:
-        topic_counts = topic_df.groupby('cluster_id').size().reset_index(name='count')
+        topic_counts = topic_df.groupby("cluster_id").size().reset_index(name="count")
         # When 'topic' information is not provided, create a default label for each cluster
-        topic_counts['topic'] = topic_counts['cluster_id'].apply(lambda c: f"Cluster {c}")
+        topic_counts["topic"] = topic_counts["cluster_id"].apply(
+            lambda c: f"Cluster {c}"
+        )
 
     # -------------------------------
     # Sort counts for presentation; ascending order can be adjusted as needed
     # -------------------------------
-    topic_counts = topic_counts.sort_values('count', ascending=True)
+    topic_counts = topic_counts.sort_values("count", ascending=True)
     logger.debug("Topic counts prepared.")
     return topic_counts
 
 
-def _cluster_bar_chart_fig(
-        clusters_df: pd.DataFrame,
-        color_map: dict
-    ) -> go.Figure:
+def _cluster_bar_chart_fig(clusters_df: pd.DataFrame, color_map: dict) -> go.Figure:
     """
     Make a horizontal bar chart of cluster sizes with topic labels.
 
@@ -130,61 +128,64 @@ def _cluster_bar_chart_fig(
     # -------------------------------
     # Determine bar colors based on cluster_id using provided color map; default to gray if not found
     # -------------------------------
-    bar_colors = [color_map.get(row.cluster_id, 'gray') for _, row in topic_counts.iterrows()]
+    bar_colors = [
+        color_map.get(row.cluster_id, "gray") for _, row in topic_counts.iterrows()
+    ]
     logger.debug(f"Bar colors assigned: {bar_colors}")
 
     # -------------------------------
     # Add horizontal bar trace to the figure with counts as lengths
     # -------------------------------
-    fig.add_trace(go.Bar(
-        y=list(range(len(topic_counts))),
-        x=topic_counts['count'],
-        orientation='h',
-        marker=dict(
-            color=bar_colors,
-            line=dict(color='rgba(0,0,0,0.3)', width=0.5)
-        ),
-        text=topic_counts['count'],
-        textposition='outside',
-        hoverinfo='skip'
-    ))
+    fig.add_trace(
+        go.Bar(
+            y=list(range(len(topic_counts))),
+            x=topic_counts["count"],
+            orientation="h",
+            marker=dict(
+                color=bar_colors, line=dict(color="rgba(0,0,0,0.3)", width=0.5)
+            ),
+            text=topic_counts["count"],
+            textposition="outside",
+            hoverinfo="skip",
+        )
+    )
 
     # -------------------------------
     # Add cluster topic labels as text annotations next to the bars
     # -------------------------------
-    fig.add_trace(go.Scatter(
-        x=[0] * len(topic_counts),
-        y=[i + 0.5 for i in range(len(topic_counts))],
-        mode='text',
-        text=[f'Cluster {row.cluster_id}: {row.topic}' for _, row in topic_counts.iterrows()],
-        textposition='middle right',
-        textfont=dict(size=12, color='white'),
-        showlegend=False
-    ))
+    fig.add_trace(
+        go.Scatter(
+            x=[0] * len(topic_counts),
+            y=[i + 0.5 for i in range(len(topic_counts))],
+            mode="text",
+            text=[
+                f"Cluster {row.cluster_id}: {row.topic}"
+                for _, row in topic_counts.iterrows()
+            ],
+            textposition="middle right",
+            textfont=dict(size=12, color="white"),
+            showlegend=False,
+        )
+    )
 
     # -------------------------------
     # Update layout settings for a dark theme and improved visualization
     # -------------------------------
     fig.update_layout(
         title=dict(
-            text='Topics by Cluster Size',
-            x=0.5,
-            font=dict(size=24, color='white')
+            text="Topics by Cluster Size", x=0.5, font=dict(size=24, color="white")
         ),
         xaxis_title=None,
         yaxis_title=None,
-        plot_bgcolor='black',
-        paper_bgcolor='black',
+        plot_bgcolor="black",
+        paper_bgcolor="black",
         width=900,
         bargroupgap=0.5,
         height=max(400, len(topic_counts) * 50),
         margin=dict(l=0, r=40, t=100, b=80),
         showlegend=False,
-        yaxis=dict(
-            showticklabels=False,
-            range=[-0.5, len(topic_counts)]
-        ),
-        font=dict(size=14)
+        yaxis=dict(showticklabels=False, range=[-0.5, len(topic_counts)]),
+        font=dict(size=14),
     )
 
     # -------------------------------
@@ -193,20 +194,17 @@ def _cluster_bar_chart_fig(
     fig.update_xaxes(
         showgrid=True,
         gridwidth=1,
-        gridcolor='rgba(0,0,0,0.1)',
+        gridcolor="rgba(0,0,0,0.1)",
         zeroline=True,
         zerolinewidth=1,
-        zerolinecolor='rgba(0,0,0,0.2)'
+        zerolinecolor="rgba(0,0,0,0.2)",
     )
 
     logger.debug("Cluster bar chart created successfully.")
     return fig
 
 
-def _silhouette_fig(
-        clustered_df: pd.DataFrame,
-        color_map: dict
-    ) -> go.Figure:
+def _silhouette_fig(clustered_df: pd.DataFrame, color_map: dict) -> go.Figure:
     """
     Generate an enhanced silhouette plot using Plotly, ordered by cluster size.
 
@@ -227,7 +225,7 @@ def _silhouette_fig(
     # -------------------------------
     # Validate presence of required 'reduced_vector' column in the DataFrame
     # -------------------------------
-    if 'reduced_vector' not in clustered_df.columns:
+    if "reduced_vector" not in clustered_df.columns:
         logger.error("DataFrame does not contain 'reduced_vector' column.")
         raise ValueError("No 'reduced_vector' column found in DataFrame")
 
@@ -235,7 +233,7 @@ def _silhouette_fig(
     # Attempt to convert 'reduced_vector' column to numpy array for processing
     # -------------------------------
     try:
-        data = np.vstack(clustered_df['reduced_vector'].values)  # type: ignore
+        data = np.vstack(clustered_df["reduced_vector"].values)  # type: ignore
     except Exception as e:
         logger.error("Error converting 'reduced_vector' column to numpy array.")
         raise ValueError("Error processing 'reduced_vector' column.") from e
@@ -243,7 +241,7 @@ def _silhouette_fig(
     # -------------------------------
     # Filter out noise clusters (labelled as -1) for silhouette analysis
     # -------------------------------
-    clusters = clustered_df['cluster_id'].values
+    clusters = clustered_df["cluster_id"].values
     mask = clusters != -1
     data_filtered = data[mask]
     clusters_filtered = clusters[mask]
@@ -258,16 +256,24 @@ def _silhouette_fig(
     # -------------------------------
     # Compute silhouette values and average silhouette score using Euclidean distance
     # -------------------------------
-    silhouette_vals = silhouette_samples(data_filtered, clusters_filtered, metric='euclidean')
-    silhouette_avg = silhouette_score(data_filtered, clusters_filtered, metric='euclidean')
+    silhouette_vals = silhouette_samples(
+        data_filtered, clusters_filtered, metric="euclidean"
+    )
+    silhouette_avg = silhouette_score(
+        data_filtered, clusters_filtered, metric="euclidean"
+    )
     logger.debug(f"Silhouette average score: {silhouette_avg:.3f}")
 
     # -------------------------------
     # Initialize Plotly figure and prepare variables for layout spacing
     # -------------------------------
     fig = go.Figure()
-    cluster_sizes = {c: np.sum(clusters_filtered == c) for c in np.unique(clusters_filtered)}
-    sorted_clusters = sorted(cluster_sizes.keys(), key=lambda c: cluster_sizes[c], reverse=True)
+    cluster_sizes = {
+        c: np.sum(clusters_filtered == c) for c in np.unique(clusters_filtered)
+    }
+    sorted_clusters = sorted(
+        cluster_sizes.keys(), key=lambda c: cluster_sizes[c], reverse=True
+    )
 
     spacing = 10
     total_height = 10  # initial offset
@@ -281,18 +287,26 @@ def _silhouette_fig(
     # Add silhouette traces for each cluster using a helper function
     # -------------------------------
     for cluster in sorted_clusters:
-        y_upper = _add_silhouette_cluster(fig, cluster, silhouette_vals, clusters_filtered, y_upper, spacing, color_map)
+        y_upper = _add_silhouette_cluster(
+            fig,
+            cluster,
+            silhouette_vals,
+            clusters_filtered,
+            y_upper,
+            spacing,
+            color_map,
+        )
 
     # -------------------------------
     # Add a vertical line representing the average silhouette score
     # -------------------------------
     fig.add_shape(
-        type='line',
+        type="line",
         x0=silhouette_avg,
         x1=silhouette_avg,
         y0=0,
         y1=total_height,
-        line=dict(color='red', dash='dash')
+        line=dict(color="red", dash="dash"),
     )
 
     # -------------------------------
@@ -301,44 +315,40 @@ def _silhouette_fig(
     fig.add_annotation(
         x=silhouette_avg,
         y=total_height,
-        text=f'Average silhouette: {silhouette_avg:.3f}',
+        text=f"Average silhouette: {silhouette_avg:.3f}",
         showarrow=False,
-        yanchor='bottom',
-        font=dict(color='white')
+        yanchor="bottom",
+        font=dict(color="white"),
     )
 
     # -------------------------------
     # Update layout settings for the silhouette plot with dark theme and grid lines
     # -------------------------------
     fig.update_layout(
-        title=dict(
-            text='Silhouette Plot',
-            x=0.5,
-            font=dict(size=24, color='white')
-        ),
-        xaxis_title='Silhouette Coefficient',
+        title=dict(text="Silhouette Plot", x=0.5, font=dict(size=24, color="white")),
+        xaxis_title="Silhouette Coefficient",
         xaxis=dict(
             range=[-0.2, 1],
             showgrid=True,
-            gridcolor='gray',
+            gridcolor="gray",
             zeroline=True,
-            zerolinecolor='gray',
-            color='white'
+            zerolinecolor="gray",
+            color="white",
         ),
         yaxis=dict(
             range=[0, total_height],
             showticklabels=False,
             title=None,
-            color='white',
-            gridcolor='gray',
-            zerolinecolor='gray'
+            color="white",
+            gridcolor="gray",
+            zerolinecolor="gray",
         ),
-        plot_bgcolor='black',
-        paper_bgcolor='black',
+        plot_bgcolor="black",
+        paper_bgcolor="black",
         width=900,
         height=max(500, total_height),
         showlegend=False,
-        margin=dict(l=80, r=30, t=100, b=80)
+        margin=dict(l=80, r=30, t=100, b=80),
     )
 
     logger.debug("Silhouette plot created successfully.")
@@ -346,14 +356,8 @@ def _silhouette_fig(
 
 
 def _add_silhouette_cluster(
-        fig, 
-        cluster, 
-        silhouette_vals, 
-        clusters_filtered, 
-        y_upper, 
-        spacing, 
-        color_map
-    ):
+    fig, cluster, silhouette_vals, clusters_filtered, y_upper, spacing, color_map
+):
     """
     Helper function to add silhouette traces and annotations for a single cluster.
 
@@ -381,17 +385,19 @@ def _add_silhouette_cluster(
     # -------------------------------
     # Add a filled area trace for the cluster silhouette
     # -------------------------------
-    fillcolor = color_map.get(cluster, 'gray')
-    fig.add_trace(go.Scatter(
-        x=vals,
-        y=np.arange(y_lower, y_upper),
-        fill='tozerox',
-        mode='none',
-        name=f'Cluster {cluster} (n={size})',
-        fillcolor=fillcolor,
-        opacity=0.7,
-        hoverinfo='skip'
-    ))
+    fillcolor = color_map.get(cluster, "gray")
+    fig.add_trace(
+        go.Scatter(
+            x=vals,
+            y=np.arange(y_lower, y_upper),
+            fill="tozerox",
+            mode="none",
+            name=f"Cluster {cluster} (n={size})",
+            fillcolor=fillcolor,
+            opacity=0.7,
+            hoverinfo="skip",
+        )
+    )
 
     # -------------------------------
     # Add a text annotation at the midpoint of the cluster's silhouette area
@@ -400,21 +406,18 @@ def _add_silhouette_cluster(
     fig.add_annotation(
         x=0,
         y=y_mid,
-        text=f'Cluster {cluster}',
+        text=f"Cluster {cluster}",
         showarrow=False,
-        xanchor='left',
-        font=dict(color='white', size=14),
-        xshift=5
+        xanchor="left",
+        font=dict(color="white", size=14),
+        xshift=5,
     )
 
     # Return updated y_upper position for the next cluster silhouette
     return y_lower - spacing
 
 
-def _wrap_text(
-        text: str, 
-        width: int | None = None
-    ) -> str:
+def _wrap_text(text: str, width: int | None = None) -> str:
     """
     Helper function to wrap text at word boundaries, handling both English and Chinese.
 
@@ -433,7 +436,7 @@ def _wrap_text(
     # -------------------------------
     if width is None:
         width = 100
-    paragraphs = text.split('\n')
+    paragraphs = text.split("\n")
     wrapped_lines = []
 
     # -------------------------------
@@ -444,16 +447,13 @@ def _wrap_text(
             wrapped_lines.extend(_wrap_paragraph(paragraph.strip(), width))
         else:
             # Preserve empty lines as empty strings
-            wrapped_lines.append('')
+            wrapped_lines.append("")
 
     # Join wrapped lines with HTML line breaks, filtering out any empty lines
-    return '<br>'.join(filter(None, wrapped_lines))
+    return "<br>".join(filter(None, wrapped_lines))
 
 
-def _wrap_paragraph(
-        text: str, 
-        width: int
-    ) -> list:
+def _wrap_paragraph(text: str, width: int) -> list:
     """
     Wrap a single paragraph of text.
 
@@ -502,12 +502,12 @@ def _wrap_paragraph(
         else:
             if current_line:
                 # Append the current line and start a new one
-                lines.append(''.join(current_line).strip())
+                lines.append("".join(current_line).strip())
             current_line = [chunk]
             current_length = chunk_width
 
     if current_line:
-        lines.append(''.join(current_line).strip())
+        lines.append("".join(current_line).strip())
 
     return lines
 
@@ -525,7 +525,7 @@ def _is_chinese(char: str) -> bool:
     # -------------------------------
     # Determine if the Unicode code point falls within the range for Chinese characters
     # -------------------------------
-    return '\u4e00' <= char <= '\u9fff'
+    return "\u4e00" <= char <= "\u9fff"
 
 
 def _split_mixed_text(text: str) -> list:
@@ -549,7 +549,7 @@ def _split_mixed_text(text: str) -> list:
     # - [^\s\u4e00-\u9fff]+: Matches one or more consecutive non-space and non-Chinese characters.
     # - \s+: Matches one or more whitespace characters.
     # -------------------------------
-    pattern = r'[\u4e00-\u9fff]|[^\s\u4e00-\u9fff]+|\s+'
+    pattern = r"[\u4e00-\u9fff]|[^\s\u4e00-\u9fff]+|\s+"
     return [chunk for chunk in re.findall(pattern, text) if chunk]
 
 
@@ -580,18 +580,19 @@ def _wrap_english_text(text: str, width: int) -> list:
             current_length += word_length + 1
         else:
             # Append the current line to lines and start a new line with the current word
-            lines.append(' '.join(current_line))
+            lines.append(" ".join(current_line))
             current_line = [word]
             current_length = word_length
 
     if current_line:
-        lines.append(' '.join(current_line))
+        lines.append(" ".join(current_line))
     return lines
 
 
 # -------------------------------------------------------------------------
 # Class for Scatter (Point Cloud) Plot
 # -------------------------------------------------------------------------
+
 
 class ScatterPlot:
     """
@@ -602,13 +603,13 @@ class ScatterPlot:
     """
 
     def __init__(
-            self,
-            clusters_df: pd.DataFrame,
-            color_map: dict,
-            id_col_name: Optional[str] = None,
-            content_col_name: str = 'content',
-            wrap_width: int = 100
-        ):
+        self,
+        clusters_df: pd.DataFrame,
+        color_map: dict,
+        id_col_name: Optional[str] = None,
+        content_col_name: str = "content",
+        wrap_width: int = 100,
+    ):
         """
         Initialize the ScatterPlot with clustering results and plotting configuration.
 
@@ -642,11 +643,11 @@ class ScatterPlot:
             logger.error("Input clusters DataFrame is empty.")
             raise ValueError("Input DataFrame is empty.")
 
-        if 'reduced_vector' not in self.clusters_df.columns:
+        if "reduced_vector" not in self.clusters_df.columns:
             logger.error("DataFrame does not contain 'reduced_vector' column.")
             raise ValueError("DataFrame must contain 'reduced_vector' column.")
 
-        first_vector = self.clusters_df['reduced_vector'].iloc[0]
+        first_vector = self.clusters_df["reduced_vector"].iloc[0]
         if not isinstance(first_vector, (list, tuple, np.ndarray)):
             logger.error("'reduced_vector' entries are not list-like.")
             raise ValueError("'reduced_vector' entries must be list-like.")
@@ -666,7 +667,7 @@ class ScatterPlot:
             - str: The formatted hover text.
         """
         hover = f"Cluster: {row['cluster_id']}"
-        if 'topic' in row:
+        if "topic" in row:
             hover += f"<br>Topic: {row['topic']}<br><br>"
         if self.id_col_name is not None:
             hover += f"ID: {row[self.id_col_name]}<br>"
@@ -674,11 +675,8 @@ class ScatterPlot:
         return hover
 
     def _create_centroid_annotation(
-            self,
-            cluster_data: pd.DataFrame,
-            has_3d: bool,
-            cluster_topic: str
-        ) -> go.Trace:
+        self, cluster_data: pd.DataFrame, has_3d: bool, cluster_topic: str
+    ) -> go.Trace:
         """
         Create a text annotation at the centroid of a non-noise cluster.
 
@@ -690,41 +688,38 @@ class ScatterPlot:
         Returns:
             - go.Trace: A Plotly trace containing the centroid annotation.
         """
-        center_x = cluster_data['reduced_vector'].apply(lambda v: v[0]).mean()
-        center_y = cluster_data['reduced_vector'].apply(lambda v: v[1]).mean()
+        center_x = cluster_data["reduced_vector"].apply(lambda v: v[0]).mean()
+        center_y = cluster_data["reduced_vector"].apply(lambda v: v[1]).mean()
 
         if has_3d:
-            center_z = cluster_data['reduced_vector'].apply(lambda v: v[2]).mean()
+            center_z = cluster_data["reduced_vector"].apply(lambda v: v[2]).mean()
             annotation = go.Scatter3d(
                 x=[center_x],
                 y=[center_y],
                 z=[center_z],
-                mode='text',
+                mode="text",
                 text=[cluster_topic],
                 textposition="middle center",
-                textfont=dict(size=14, color='white', family="Arial Black"),
-                hoverinfo='skip',
-                showlegend=False
+                textfont=dict(size=14, color="white", family="Arial Black"),
+                hoverinfo="skip",
+                showlegend=False,
             )
         else:
             annotation = go.Scatter(
                 x=[center_x],
                 y=[center_y],
-                mode='text',
+                mode="text",
                 text=[cluster_topic],
                 textposition="middle center",
-                textfont=dict(size=14, color='white', family="Arial Black"),
-                hoverinfo='skip',
-                showlegend=False
+                textfont=dict(size=14, color="white", family="Arial Black"),
+                hoverinfo="skip",
+                showlegend=False,
             )
-        return annotation # type: ignore
+        return annotation  # type: ignore
 
     def _create_cluster_trace(
-            self,
-            cluster_data: pd.DataFrame,
-            cluster_id: int,
-            has_3d: bool
-        ) -> List[go.Trace]:
+        self, cluster_data: pd.DataFrame, cluster_id: int, has_3d: bool
+    ) -> List[go.Trace]:
         """
         Create scatter traces for a single cluster, including hover text and (for non-noise clusters) a centroid annotation.
 
@@ -742,65 +737,67 @@ class ScatterPlot:
             return traces
 
         # Determine visual properties based on whether the cluster is noise (-1) or a valid cluster.
-        is_noise = (cluster_id == -1)
+        is_noise = cluster_id == -1
         opacity = 0.35 if is_noise else 0.75
-        symbol = 'circle'
+        symbol = "circle"
         size = 2 if is_noise else 4
-        legend_name = str(cluster_id) if not is_noise else 'Noise'
-        point_color = self.color_map.get(cluster_id, 'gray')
+        legend_name = str(cluster_id) if not is_noise else "Noise"
+        point_color = self.color_map.get(cluster_id, "gray")
 
         # Generate hover text for each point in the cluster.
         hover_text = cluster_data.apply(self._generate_hover_text, axis=1)
 
         # Extract coordinates from the 'reduced_vector' column.
-        x = cluster_data['reduced_vector'].apply(lambda v: v[0])
-        y = cluster_data['reduced_vector'].apply(lambda v: v[1])
+        x = cluster_data["reduced_vector"].apply(lambda v: v[0])
+        y = cluster_data["reduced_vector"].apply(lambda v: v[1])
 
         if has_3d:
-            z = cluster_data['reduced_vector'].apply(lambda v: v[2])
+            z = cluster_data["reduced_vector"].apply(lambda v: v[2])
             scatter_trace = go.Scatter3d(
                 x=x,
                 y=y,
                 z=z,
-                mode='markers',
+                mode="markers",
                 marker=dict(
                     size=size,
                     color=point_color,
                     opacity=opacity,
                     symbol=symbol,
-                    line=dict(color='rgba(0,0,0,0.2)', width=0.5)
+                    line=dict(color="rgba(0,0,0,0.2)", width=0.5),
                 ),
                 name=legend_name,
                 text=hover_text,
-                hoverinfo='text',
-                showlegend=True
+                hoverinfo="text",
+                showlegend=True,
             )
         else:
             scatter_trace = go.Scatter(
                 x=x,
                 y=y,
-                mode='markers',
+                mode="markers",
                 marker=dict(
                     size=size,
                     color=point_color,
                     opacity=opacity,
                     symbol=symbol,
-                    line=dict(color='rgba(0,0,0,0.2)', width=0.5)
+                    line=dict(color="rgba(0,0,0,0.2)", width=0.5),
                 ),
                 name=legend_name,
                 text=hover_text,
-                hoverinfo='text',
-                showlegend=True
+                hoverinfo="text",
+                showlegend=True,
             )
         traces.append(scatter_trace)
 
         # For non-noise clusters, add a centroid annotation with the topic label.
         if not is_noise:
-            if 'topic' in cluster_data.columns:
-                cluster_topic = cluster_data['topic'].mode().iloc[0]
+            if "topic" in cluster_data.columns:
+                cluster_topic = cluster_data["topic"].mode().iloc[0]
             else:
                 cluster_topic = f"Cluster {cluster_id}"
-            annotation_trace = self._create_centroid_annotation(cluster_data, has_3d, cluster_topic)
+            annotation_trace = self._create_centroid_annotation(
+                cluster_data, has_3d, cluster_topic
+            )
             traces.append(annotation_trace)
 
         return traces
@@ -816,49 +813,44 @@ class ScatterPlot:
             - dict: Dictionary of layout settings for the Plotly figure.
         """
         layout_args = dict(
-            title=dict(
-                text='Clusters',
-                x=0.5,
-                font=dict(size=24, color='white')
-            ),
-            plot_bgcolor='black',
-            paper_bgcolor='black',
+            title=dict(text="Clusters", x=0.5, font=dict(size=24, color="white")),
+            plot_bgcolor="black",
+            paper_bgcolor="black",
             showlegend=True,
             height=1000,
             margin=dict(l=0, r=120, t=50, b=0),
-            legend=dict(
-                x=1,
-                y=0.5,
-                xanchor='left',
-                font=dict(size=12, color='white')
-            ),
+            legend=dict(x=1, y=0.5, xanchor="left", font=dict(size=12, color="white")),
             hoverlabel=dict(
-                bgcolor='rgba(0,0,0,0.8)',
-                font=dict(color='white', size=12),
-                align='left',
-                namelength=-1
-            )
+                bgcolor="rgba(0,0,0,0.8)",
+                font=dict(color="white", size=12),
+                align="left",
+                namelength=-1,
+            ),
         )
 
         if has_3d:
-            layout_args.update(dict(
-                scene=dict(
+            layout_args.update(
+                dict(
+                    scene=dict(
+                        xaxis=dict(showgrid=False, zeroline=False, visible=False),
+                        yaxis=dict(showgrid=False, zeroline=False, visible=False),
+                        zaxis=dict(showgrid=False, zeroline=False, visible=False),
+                        bgcolor="black",
+                        camera=dict(
+                            up=dict(x=0, y=0, z=1),
+                            center=dict(x=0, y=0, z=0),
+                            eye=dict(x=1.5, y=1.5, z=1.5),
+                        ),
+                    )
+                ) #type: ignore
+            )
+        else:
+            layout_args.update(
+                dict(
                     xaxis=dict(showgrid=False, zeroline=False, visible=False),
                     yaxis=dict(showgrid=False, zeroline=False, visible=False),
-                    zaxis=dict(showgrid=False, zeroline=False, visible=False),
-                    bgcolor='black',
-                    camera=dict(
-                        up=dict(x=0, y=0, z=1),
-                        center=dict(x=0, y=0, z=0),
-                        eye=dict(x=1.5, y=1.5, z=1.5)
-                    )
                 )
-            ))  # type: ignore
-        else:
-            layout_args.update(dict(
-                xaxis=dict(showgrid=False, zeroline=False, visible=False),
-                yaxis=dict(showgrid=False, zeroline=False, visible=False)
-            ))
+            )
         return layout_args
 
     def create_figure(self) -> go.Figure:
@@ -879,20 +871,26 @@ class ScatterPlot:
             fig.add_annotation(
                 text=f"Data has dims={dim}. Cannot plot scatter plot with dims > 3. Skipping plot.",
                 showarrow=False,
-                xref="paper", yref="paper",
-                x=0.5, y=0.5,
-                font=dict(size=20, color="red")
+                xref="paper",
+                yref="paper",
+                x=0.5,
+                y=0.5,
+                font=dict(size=20, color="red"),
             )
             return fig
 
-        has_3d = (dim == 3)
-        logger.debug(f"Detected {'3D' if has_3d else '2D'} plotting based on 'reduced_vector'.")
+        has_3d = dim == 3
+        logger.debug(
+            f"Detected {'3D' if has_3d else '2D'} plotting based on 'reduced_vector'."
+        )
 
         # Initialize an empty list for traces.
         all_traces = []
         # Iterate over each unique cluster and generate corresponding traces.
-        for cluster_id in sorted(self.clusters_df['cluster_id'].unique()):
-            cluster_data = self.clusters_df[self.clusters_df['cluster_id'] == cluster_id]
+        for cluster_id in sorted(self.clusters_df["cluster_id"].unique()):
+            cluster_data = self.clusters_df[
+                self.clusters_df["cluster_id"] == cluster_id
+            ]
             traces = self._create_cluster_trace(cluster_data, cluster_id, has_3d)
             all_traces.extend(traces)
 
@@ -908,6 +906,7 @@ class ScatterPlot:
 # -------------------------------------------------------------------------
 # External interface functions
 # -------------------------------------------------------------------------
+
 
 def silhouette_fig(clustered_df: pd.DataFrame) -> go.Figure:
     """
@@ -927,7 +926,7 @@ def silhouette_fig(clustered_df: pd.DataFrame) -> go.Figure:
         # Generate color mapping
         # -------------------------------
         color_map = _color_map(clustered_df)
-        
+
         # -------------------------------
         # Generate and return the silhouette plot figure
         # -------------------------------
@@ -952,7 +951,7 @@ def bars_fig(clusters_df: pd.DataFrame) -> go.Figure:
         # Generate color mapping
         # -------------------------------
         color_map = _color_map(clusters_df)
-        
+
         # -------------------------------
         # Generate and return the bar chart figure
         # -------------------------------
@@ -963,10 +962,7 @@ def bars_fig(clusters_df: pd.DataFrame) -> go.Figure:
 
 
 def validate_scatter_params(
-    clusters_df: pd.DataFrame,
-    content_col_name: str,
-    wrap_width: int,
-    id_col_name
+    clusters_df: pd.DataFrame, content_col_name: str, wrap_width: int, id_col_name
 ) -> dict:
     """
     Validate parameters for the scatter_fig function.
@@ -985,10 +981,14 @@ def validate_scatter_params(
         dict: A dictionary with the key 'wrap_width' mapping to the validated wrap_width value (ensuring it is at least 20).
     """
     if content_col_name not in clusters_df.columns:
-        raise ValueError(f"content_col_name '{content_col_name}' not found in clusters_df columns.")
+        raise ValueError(
+            f"content_col_name '{content_col_name}' not found in clusters_df columns."
+        )
 
     if id_col_name is not None and id_col_name not in clusters_df.columns:
-        raise ValueError(f"id_col_name '{id_col_name}' not found in clusters_df columns.")
+        raise ValueError(
+            f"id_col_name '{id_col_name}' not found in clusters_df columns."
+        )
 
     if wrap_width < 20:
         logging.warning("wrap_width too small, defaulting to wrap_width=20")
@@ -996,15 +996,17 @@ def validate_scatter_params(
 
     return {"wrap_width": wrap_width}
 
-#----------------------
+
+# ----------------------
 # scatter_fig Functional Interface
-#----------------------
+# ----------------------
+
 
 def scatter_fig(
     clusters_df: pd.DataFrame,
-    content_col_name: str = 'content',
+    content_col_name: str = "content",
     wrap_width: int = 100,
-    id_col_name = None
+    id_col_name=None,
 ) -> go.Figure:
     """
     Generate a scatter plot (2D or 3D) for clustering visualization using Plotly.
@@ -1023,13 +1025,15 @@ def scatter_fig(
     """
     try:
         # Validate parameters first. Clunky code, but this also makes sure that wrap_width is at least 20.
-        wrap_width = validate_scatter_params(clusters_df, content_col_name, wrap_width, id_col_name)["wrap_width"]
+        wrap_width = validate_scatter_params(
+            clusters_df, content_col_name, wrap_width, id_col_name
+        )["wrap_width"]
 
         # -------------------------------
         # Generate color mapping
         # -------------------------------
         color_map = _color_map(clusters_df)
-        
+
         # -------------------------------
         # Use the ScatterPlot class to generate and return the scatter plot figure
         # -------------------------------
@@ -1038,7 +1042,7 @@ def scatter_fig(
             color_map=color_map,
             id_col_name=id_col_name,
             content_col_name=content_col_name,
-            wrap_width=wrap_width
+            wrap_width=wrap_width,
         )
         return scatter_plot.create_figure()
     except Exception as e:

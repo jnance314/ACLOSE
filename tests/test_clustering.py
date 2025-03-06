@@ -22,22 +22,27 @@ from aclose.clustering import (
 # Dummy Classes for Testing
 # ----------------------
 
+
 class DummyTrial:
     def __init__(self):
         self.number = 1
         self.params = {}
+
     def suggest_int(self, name, low, high):
         value = (low + high) // 2
         self.params[name] = value
         return value
+
     def suggest_float(self, name, low, high):
         value = (low + high) / 2
         self.params[name] = value
         return value
+
     def suggest_categorical(self, name, choices):
         value = choices[0]
         self.params[name] = value
         return value
+
 
 class DummyFrozenTrial:
     def __init__(self, number, values, params):
@@ -45,9 +50,11 @@ class DummyFrozenTrial:
         self.values = values
         self.params = params
 
+
 # ----------------------
 # Pytest Fixtures
 # ----------------------
+
 
 @pytest.fixture
 def clustering_engine():
@@ -63,10 +70,10 @@ def clustering_engine():
     umap_config = UMAPConfig(dims=2)
     # Ensure min_cluster_size >= 2 for small datasets.
     hdbscan_config = HDBSCANConfig(
-        min_cluster_size_multiplier_min=0.1, 
+        min_cluster_size_multiplier_min=0.1,
         min_cluster_size_multiplier_max=0.2,
         min_samples_min=2,
-        min_samples_max=2  # Fix min_samples to 2 for testing small datasets.
+        min_samples_max=2,  # Fix min_samples to 2 for testing small datasets.
     )
     branch_config = BranchDetectionConfig(enabled=False)
     pca_config = PCAConfig(target_evr=0.9)
@@ -84,13 +91,15 @@ def clustering_engine():
         umap_config=umap_config,
         hdbscan_config=hdbscan_config,
         branch_config=branch_config,
-        pca_config=pca_config
+        pca_config=pca_config,
     )
     return engine
+
 
 # ----------------------
 # Tests for Helper Methods
 # ----------------------
+
 
 def test_compute_metrics_valid(clustering_engine):
     """
@@ -104,6 +113,7 @@ def test_compute_metrics_valid(clustering_engine):
     assert "silhouette" in metrics
     assert "neg_noise" in metrics
 
+
 def test_compute_metrics_invalid(clustering_engine):
     """
     Test _compute_metrics when only one cluster exists.
@@ -114,6 +124,7 @@ def test_compute_metrics_invalid(clustering_engine):
     metrics = clustering_engine._compute_metrics(reduced_data, labels)
     assert metrics is None
 
+
 def test_euclidean_distance_3d(clustering_engine):
     """
     Test the _euclidean_distance_3d method.
@@ -123,44 +134,59 @@ def test_euclidean_distance_3d(clustering_engine):
     expected = math.sqrt(3)
     assert pytest.approx(dist, rel=1e-3) == expected
 
+
 def test_create_models(clustering_engine):
     """
     Test _create_models to verify that it returns valid UMAP and HDBSCAN models and parameters.
     """
     dummy_trial = DummyTrial()
     num_data_pts = 100
-    umap_model, hdbscan_model, umap_params, hdbscan_params = clustering_engine._create_models(dummy_trial, num_data_pts)
+    umap_model, hdbscan_model, umap_params, hdbscan_params = (
+        clustering_engine._create_models(dummy_trial, num_data_pts)
+    )
     assert isinstance(umap_model, umap.UMAP)
     assert isinstance(hdbscan_model, hdbscan.HDBSCAN)
     # Check that the suggested parameters lie within expected bounds (using defaults from the dataclasses)
     assert umap_params["n_neighbors"] >= clustering_engine.umap_config.n_neighbors_min
-    assert hdbscan_params["min_samples"] >= clustering_engine.hdbscan_config.min_samples_min
+    assert (
+        hdbscan_params["min_samples"]
+        >= clustering_engine.hdbscan_config.min_samples_min
+    )
+
 
 def test_default_models(clustering_engine):
     """
     Test _default_models to verify that default models are created with averaged parameter values.
     """
     num_data_pts = 50
-    umap_model, hdbscan_model, umap_params, hdbscan_params = clustering_engine._default_models(num_data_pts)
+    umap_model, hdbscan_model, umap_params, hdbscan_params = (
+        clustering_engine._default_models(num_data_pts)
+    )
     assert isinstance(umap_model, umap.UMAP)
     assert isinstance(hdbscan_model, hdbscan.HDBSCAN)
-    expected_dims = (clustering_engine.umap_config.dims 
-                     if clustering_engine.umap_config.dims is not None 
-                     else 3)
+    expected_dims = (
+        clustering_engine.umap_config.dims
+        if clustering_engine.umap_config.dims is not None
+        else 3
+    )
     assert umap_params["n_components"] == expected_dims
+
 
 def test_triple_objective_exception(clustering_engine, monkeypatch):
     """
     Test _triple_objective to confirm that if _create_models raises an exception,
     the objective returns a list of negative infinity values.
     """
+
     def raise_exception(*args, **kwargs):
         raise Exception("Forced error")
+
     monkeypatch.setattr(clustering_engine, "_create_models", raise_exception)
     dummy_trial = DummyTrial()
     embeddings = np.random.rand(10, 2)
     result = clustering_engine._triple_objective(dummy_trial, embeddings)
     assert result == [float("-inf"), float("-inf"), float("-inf")]
+
 
 def test_get_best_solution(clustering_engine):
     """
@@ -174,21 +200,27 @@ def test_get_best_solution(clustering_engine):
     assert best_trial in pareto_trials
     assert method == "pareto_topsis"
 
+
 def test_interpret_metric(clustering_engine):
     """
     Test the _interpret_metric method for different metric names and values.
     """
     # For n_clusters, test with a value equal to min_clusters (should be interpreted as a bit low or OK)
-    msg_nc = clustering_engine._interpret_metric("n_clusters", clustering_engine.min_clusters)
+    msg_nc = clustering_engine._interpret_metric(
+        "n_clusters", clustering_engine.min_clusters
+    )
     assert "low" in msg_nc or "OK" in msg_nc
 
     # For noise_ratio, test with a value below min_noise_ratio
-    msg_nr = clustering_engine._interpret_metric("noise_ratio", clustering_engine.min_noise_ratio - 0.01)
+    msg_nr = clustering_engine._interpret_metric(
+        "noise_ratio", clustering_engine.min_noise_ratio - 0.01
+    )
     assert "too good" in msg_nr
 
     # For silhouette_score, test with a low value
     msg_ss = clustering_engine._interpret_metric("silhouette_score", 0.3)
     assert "poor" in msg_ss
+
 
 def test_pca_preprocess(clustering_engine):
     """
@@ -205,6 +237,7 @@ def test_pca_preprocess(clustering_engine):
     reduced_df = result["pcd_reduced_df"]
     assert isinstance(reduced_df["embedding_vector"].iloc[0], list)
 
+
 def test_log_cluster_sizes(clustering_engine, caplog):
     """
     Test _log_cluster_sizes by capturing log output and ensuring cluster sizes are reported.
@@ -217,9 +250,11 @@ def test_log_cluster_sizes(clustering_engine, caplog):
     assert any("Cluster 1" in msg for msg in messages)
     assert any("Cluster 2" in msg for msg in messages)
 
+
 # ----------------------
 # Tests for High-Level Methods
 # ----------------------
+
 
 def test_optimize_missing_column(clustering_engine):
     """
@@ -229,6 +264,7 @@ def test_optimize_missing_column(clustering_engine):
     with pytest.raises(ValueError, match="Missing"):
         clustering_engine.optimize(df)
 
+
 def test_optimize_success(clustering_engine):
     """
     Test optimize with a minimal valid DataFrame.
@@ -237,16 +273,25 @@ def test_optimize_success(clustering_engine):
     """
     num_samples = 20
     embeddings = [np.random.rand(5) for _ in range(num_samples)]
-    df = pd.DataFrame({
-        "embedding_vector": embeddings,
-        "content": [f"sample {i}" for i in range(num_samples)]
-    })
+    df = pd.DataFrame(
+        {
+            "embedding_vector": embeddings,
+            "content": [f"sample {i}" for i in range(num_samples)],
+        }
+    )
     result = clustering_engine.optimize(df)
     for key in ("clustered_df", "umap_model", "hdbscan_model", "metrics_dict"):
         assert key in result
     clustered_df = result["clustered_df"]
-    for col in ["membership_strength", "core_point", "outlier_score", "reduced_vector", "cluster_id"]:
+    for col in [
+        "membership_strength",
+        "core_point",
+        "outlier_score",
+        "reduced_vector",
+        "cluster_id",
+    ]:
         assert col in clustered_df.columns
+
 
 def test_run_clustering():
     """
@@ -258,20 +303,30 @@ def test_run_clustering():
     """
     num_samples = 20
     embeddings = [np.random.rand(5) for _ in range(num_samples)]
-    df = pd.DataFrame({
-        "embedding_vector": embeddings,
-        "content": [f"sample {i}" for i in range(num_samples)]
-    })
+    df = pd.DataFrame(
+        {
+            "embedding_vector": embeddings,
+            "content": [f"sample {i}" for i in range(num_samples)],
+        }
+    )
     result = run_clustering(
         df,
         # Override HDBSCAN parameters to ensure a valid configuration.
         hdbscan_min_cluster_size_multiplier_min=0.1,
         hdbscan_min_cluster_size_multiplier_max=0.2,
         hdbscan_min_samples_min=2,
-        hdbscan_min_samples_max=2
+        hdbscan_min_samples_max=2,
     )
-    for key in ("clustered_df", "umap_model", "hdbscan_model", "pca_model", "metrics_dict", "branch_detector"):
+    for key in (
+        "clustered_df",
+        "umap_model",
+        "hdbscan_model",
+        "pca_model",
+        "metrics_dict",
+        "branch_detector",
+    ):
         assert key in result
+
 
 def test_validate_user_params_valid():
     """
@@ -280,21 +335,47 @@ def test_validate_user_params_valid():
     df = pd.DataFrame({"embedding_vector": [np.random.rand(5) for _ in range(10)]})
     valid = validate_user_params(
         df,
-        3,   # min_clusters
+        3,  # min_clusters
         10,  # max_clusters
-        5,   # trials_per_batch
-        2,   # min_pareto_solutions
+        5,  # trials_per_batch
+        2,  # min_pareto_solutions
         20,  # max_trials
         42,  # random_state
         "embedding_vector",
-        0.03, 0.35,
+        0.03,
+        0.35,
         -1,  # optuna_jobs (-1 for using all processors is allowed)
-        2, 25, 0.0, 0.1, 1.0, 10.0, 0.08, 1.0, 2, 20, "cosine", 3,
-        0.005, 0.025, 2, 50, 0.0, 1.0, "euclidean", "eom", 10,
+        2,
+        25,
+        0.0,
+        0.1,
+        1.0,
+        10.0,
+        0.08,
+        1.0,
+        2,
+        20,
+        "cosine",
+        3,
+        0.005,
+        0.025,
+        2,
+        50,
+        0.0,
+        1.0,
+        "euclidean",
+        "eom",
+        10,
         0.9,
-        False, 0.005, 0.025, 0.0, 0.1, False
+        False,
+        0.005,
+        0.025,
+        0.0,
+        0.1,
+        False,
     )
     assert valid is True
+
 
 def test_validate_user_params_invalid_embedding():
     """
@@ -304,9 +385,42 @@ def test_validate_user_params_invalid_embedding():
     with pytest.raises(ValueError, match="embedding"):
         validate_user_params(
             df,
-            3, 10, 5, 2, 20, 42, "embedding_vector", 0.03, 0.35, -1,
-            2, 25, 0.0, 0.1, 1.0, 10.0, 0.08, 1.0, 2, 20, "cosine", 3,
-            0.005, 0.025, 2, 50, 0.0, 1.0, "euclidean", "eom", 10,
+            3,
+            10,
+            5,
+            2,
+            20,
+            42,
+            "embedding_vector",
+            0.03,
+            0.35,
+            -1,
+            2,
+            25,
+            0.0,
+            0.1,
+            1.0,
+            10.0,
+            0.08,
+            1.0,
+            2,
+            20,
+            "cosine",
+            3,
+            0.005,
+            0.025,
+            2,
+            50,
+            0.0,
+            1.0,
+            "euclidean",
+            "eom",
+            10,
             0.9,
-            False, 0.005, 0.025, 0.0, 0.1, False
+            False,
+            0.005,
+            0.025,
+            0.0,
+            0.1,
+            False,
         )

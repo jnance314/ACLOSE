@@ -842,7 +842,7 @@ class ScatterPlot:
                             eye=dict(x=1.5, y=1.5, z=1.5),
                         ),
                     )
-                ) #type: ignore
+                )  # type: ignore
             )
         else:
             layout_args.update(

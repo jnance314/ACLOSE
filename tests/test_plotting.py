@@ -10,7 +10,7 @@ from aclose.plotting import (
     scatter_fig,
     validate_scatter_params,
 )
-import atmose.plotting as plotting  # for internal function access
+import aclose.plotting as plotting  # for internal function access
 
 
 # ------------------------------------------------------------------------------

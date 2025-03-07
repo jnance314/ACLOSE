@@ -16,7 +16,7 @@ ACLOSE is a powerful machine learning library that automates the discovery, labe
 
 Think of it as **automatic topic discovery without the headaches**.
 
-![Visualize Clusters](https://storage.googleapis.com/portfolio-site-assets/aclose_assets/demo.gif)
+<video src="https://github.com/user-attachments/assets/10273f00-eb91-4aae-a98b-dcdb554fd640" autoplay loop muted playsinline></video>
 
 ## 🔥 Why Use ACLOSE?
 

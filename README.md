@@ -1,4 +1,5 @@
-# ACLOSE 🔍✨ Automatic Clustering and Labeling Of Semantic Embeddings
+![ACLOSE Hero Banner](https://storage.googleapis.com/portfolio-site-assets/aclose_assets/neon.png)
+# Automatic Clustering and Labeling Of Semantic Embeddings
 
 <div align="center">
   
@@ -13,7 +14,6 @@
 ## 🌟 What is ACLOSE?
 
 ACLOSE is a small framework that automates the discovery, labeling, and visualization of topics within text data. It combines SOTA dimensionality reduction, clustering, and LLMs to find latent topics in a text corpus, given its semantic embeddings, with minimal code.
-
 Think of it as **automatic topic discovery without the headaches**.
 
 <video src="https://github.com/user-attachments/assets/10273f00-eb91-4aae-a98b-dcdb554fd640" autoplay loop muted playsinline></video>

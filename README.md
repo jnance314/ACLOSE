@@ -11,7 +11,12 @@
 
 </div>
 
-## 🌟 What is ACLOSE?
+## ✨ Ready-to-run examples in the Colab Notebook 
+<a target="_blank" href="https://colab.research.google.com/drive/1UsXnxj2aT2VmL7HP2QiAbvJJk_n-eIhr?usp=sharing">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a>
+
+## 🧩 What is ACLOSE?
 
 ACLOSE is a small framework that automates the discovery, labeling, and visualization of topics within text data. It combines SOTA dimensionality reduction, clustering, and LLMs to find latent topics in a text corpus, given its semantic embeddings, with minimal code.
 Think of it as **automatic topic discovery without the headaches**.
@@ -25,7 +30,7 @@ Think of it as **automatic topic discovery without the headaches**.
 - 📊 **Embedding vectors by themselves aren't helpful** for understanding content themes
 - 🧩 **Manual topic discovery is tedious** and doesn't scale to large datasets
 - 🏷️ **Labeling clusters is subjective** and time-consuming
-- ⚙️ **Tuning clustering algorithms is complex** and requires expertise
+- 🍇 **Tuning clustering algorithms is complex** and requires expertise
 
 ### ACLOSE's Solution
 
@@ -44,13 +49,12 @@ No more guessing at parameters or manually interpreting cluster contents!
 - **🎯 Smart LLM-Based Labeling**: Two-pass approach with core and peripheral point sampling for accurate topics
 - **📊 Interactive Visualizations**: Ready-to-use cluster exploration with minimal setup
 - **⚡ Production Ready**: Trained models that can be reused for classifying new data
-- **📈 Drift Monitoring**: Tools to detect when clustering models need retraining
 
 ## 📦 Installation
 
 ### Prerequisites
 
-Before installing, make sure you have a C++ compiler:
+Before installing, make sure you have a C++ compiler in your environment:
 
 - **Windows**: Install [Microsoft Visual C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
 - **Linux**: `sudo apt-get install build-essential`

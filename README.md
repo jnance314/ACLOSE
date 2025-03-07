@@ -12,7 +12,7 @@
 
 ## 🌟 What is ACLOSE?
 
-ACLOSE is a powerful machine learning library that automates the discovery, labeling, and visualization of topics within text data. It combines cutting-edge dimensionality reduction, clustering, and large language models to transform raw embeddings into meaningful, labeled topics with minimal code.
+ACLOSE is a small framework that automates the discovery, labeling, and visualization of topics within text data. It combines SOTA dimensionality reduction, clustering, and LLMs to find latent topics in a text corpus, given its semantic embeddings, with minimal code.
 
 Think of it as **automatic topic discovery without the headaches**.
 

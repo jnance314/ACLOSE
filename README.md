@@ -55,6 +55,9 @@ ENV PATH="/root/.local/bin:$PATH"
 pip install aclose
 ```
 
+## Chat with the code
+[If you're in a hurry, get quick answers instead of reading through the docs.](https://chatgpt.com/g/g-67ca677711e08191b799250928221fde-aclose-documentation-bot)
+
 ## Number of LLM calls
 - 2 LLM calls per cluster
 - User can choose the model
@@ -72,3 +75,34 @@ Gets additional columns after applying .label(df, data_description)
 - outlier_score
 - silhouette_score
 - reduced_vector
+
+---
+
+markdown_content = f"""# Project Showcase
+
+## Images
+
+### Image 1: Visually Inspect Clusters
+This is a short description for the first image.
+![Image 1](https://storage.googleapis.com/portfolio-site-assets/aclose_assets/demo.gif)
+
+### Image 2: Topic Prevalence
+This is a short description for the second image.
+![Image 2](https://storage.googleapis.com/portfolio-site-assets/aclose_assets/bars.png)
+
+### Image 3: Cluster Quality
+This is a short description for the third image.
+![Image 3](https://storage.googleapis.com/portfolio-site-assets/aclose_assets/silhouette.png)
+
+<!-- ### Image 4: 2D and 3D Scatter Plots
+This is a short description for the third image.
+![Image 3](https://storage.googleapis.com/portfolio-site-assets/aclose_assets/scatter.png) -->
+
+## Code Snippet
+
+```python
+# Placeholder for your code snippet
+def example_function():
+    print("Hello, world!")
+```
+"""

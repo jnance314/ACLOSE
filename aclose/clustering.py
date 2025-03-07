@@ -1730,38 +1730,251 @@ def run_clustering(
     """
     Perform clustering on a DataFrame containing embedding vectors.
 
-    This function is a convenient functional interface for using the ClusteringEngine.
-    It expects the DataFrame to have an embedding column defined by the parameter 'embedding_col_name'
-    and returns a dictionary with:
-        - 'clustered_df': The DataFrame augmented with clustering results (additional columns: 'membership_strength', 'core_point', 'outlier_score', 'reduced_vector', and 'cluster_id').
-        - 'umap_model': The UMAP model instance used for dimensionality reduction.
-        - 'hdbscan_model': The HDBSCAN model instance used for clustering.
-        - 'pca_model': The PCA model instance used for preprocessing.
-        - 'metrics_dict': A dictionary containing key clustering metrics.
-        - 'branch_detector': The fitted BranchDetector if branch detection is enabled, else None.
+    This function optimizes UMAP and HDBSCAN hyperparameters to find the best clustering solution
+    using a multi-objective approach (silhouette score, noise ratio, and number of clusters).
 
-    Args:
-        filtered_df (pd.DataFrame): DataFrame containing the embedding vectors in the column specified by embedding_col_name.
-        min_clusters (int): Minimum acceptable number of clusters.
-        max_clusters (int): Maximum acceptable number of clusters.
-        trials_per_batch (int): Number of optimization trials for hyperparameter tuning per batch.
-        min_pareto_solutions (int): Minimum number of Pareto-optimal solutions to find before stopping optimization.
-        max_trials (int): Maximum number of optimization trials to run. If no pareto-optimal solutions are found, the process stops and falls back to default values.
-        random_state (int): Seed for reproducibility.
-        embedding_col_name (str): Name of the column containing embedding vectors.
-        min_noise_ratio (float): Minimum acceptable noise ratio.
-        max_noise_ratio (float): Maximum acceptable noise ratio.
-        optuna_jobs (int): Number of parallel jobs to run during Optuna optimization.
-        (The remaining parameters configure UMAP, HDBSCAN, PCA, and branch detection.)
+    Returns a dictionary containing the clustered DataFrame, models used, and metrics.
+
+    Parameters:
+        filtered_df (pd.DataFrame):
+            DataFrame containing embedding vectors to cluster. Must have a column named
+            by embedding_col_name (default: "embedding_vector") containing vector data as
+            list-like objects (Python lists, numpy arrays, etc.). Each vector should be
+            a numerical embedding, typically high-dimensional (e.g., 768 or 1536 dimensions
+            from language models like BERT or OpenAI embeddings).
+
+        min_clusters (int, default=3):
+            Minimum acceptable number of clusters. Trials producing fewer clusters will
+            be rejected. Lower values allow more general clustering with fewer topics,
+            while higher values force more granular clustering.
+
+        max_clusters (int, default=26):
+            Maximum acceptable number of clusters. Trials producing more clusters will
+            be rejected. Lower values create broader, more general clusters, while
+            higher values allow for more specific, fine-grained clustering, suitable
+            for larger datasets with diverse content.
+
+        trials_per_batch (int, default=10):
+            Number of hyperparameter optimization trials to run per batch. The optimization
+            process runs in batches to allow for early stopping once sufficient Pareto-optimal
+            solutions are found. Each trial tests a different combination of hyperparameters
+            (UMAP and HDBSCAN settings) and evaluates them using multiple objectives. Higher
+            values increase the chance of finding optimal solutions at the cost of computation
+            time. Consider increasing for complex data or when using powerful hardware.
+
+        min_pareto_solutions (int, default=5):
+            Minimum number of Pareto-optimal solutions to find before stopping optimization.
+            A Pareto-optimal solution is one where no objective (silhouette score, negative
+            noise ratio, or negative number of clusters) can be improved without sacrificing
+            another objective. These represent balanced trade-offs between cluster quality,
+            noise level, and number of topics. Higher values ensure a more thorough exploration
+            of this trade-off space, but require more computation time. For most applications,
+            5-10 is a good balance. The best solution is selected from this Pareto frontier
+            using TOPSIS (Technique for Order of Preference by Similarity to Ideal Solution).
+
+        max_trials (int, default=100):
+            Maximum number of trials to run during optimization. This is a safety limit to
+            prevent infinite loops. Increase for complex datasets or when using many
+            hyperparameter combinations. Stricter filtering parameters (particularly min/max
+            clusters and noise ratio constraints) will reject more trials, requiring more
+            total trials to find sufficient Pareto-optimal solutions. Similarly, forcing
+            very low dimensions (e.g., dims=2) will require more trials to find good
+            solutions. If dims=None (allowing dimension optimization), fewer trials are
+            typically needed. Decrease this value to limit computation time if needed.
+
+        random_state (int, default=42):
+            Seed for reproducibility across UMAP, PCA, and Optuna. UMAP and other dimensionality
+            reduction algorithms have stochastic components that can produce different results
+            with each run. Setting a fixed random_state ensures you get consistent results
+            when running with identical parameters, which is critical for reproducible research
+            and reliable production deployments. Any integer value can be used; changing this
+            value will produce different (but still valid) clustering solutions.
+
+        embedding_col_name (str, default="embedding_vector"):
+            Name of the column in filtered_df that contains the embedding vectors. These should
+            be list-like objects containing numerical values (e.g., [0.123, -0.456, ...]) from
+            a language model or other embedding technique. The vectors must all have the same
+            dimensionality. Change this parameter if your DataFrame uses a different column
+            name for the embeddings.
+
+        min_noise_ratio (float, default=0.03):
+            Minimum acceptable noise ratio (proportion of points classified as noise).
+            Lower values force more points into clusters, which can lead to less coherent
+            clusters. For clean, well-separated data, values as low as 0.01 may work well.
+
+        max_noise_ratio (float, default=0.35):
+            Maximum acceptable noise ratio. Higher values allow more points to be classified
+            as noise, potentially leading to more coherent clusters but less coverage. For
+            noisy data with outliers, values up to 0.5 might be appropriate.
+
+        optuna_jobs (int, default=-1):
+            Number of parallel jobs for Optuna optimization. -1 uses all available cores.
+            Higher values can significantly speed up optimization on multi-core systems but
+            increases memory usage. You might want to use a specific number (e.g., 4 or 8)
+            rather than -1 when running in resource-constrained environments (like cloud
+            functions, Docker containers, or shared servers), when you want to leave some
+            CPU cores available for other processes, or when memory is limited (as each
+            worker requires its own memory allocation).
+
+        # UMAP Parameters (all are search bounds for hyperparameter optimization)
+
+        umap_n_neighbors_min (int, default=2), umap_n_neighbors_max (int, default=25):
+            Bounds for UMAP's n_neighbors parameter, which controls the balance between local
+            and global structure. Lower values (2-5) preserve local structure but may fragment
+            clusters, suitable for finding fine-grained patterns. Higher values (15-50) preserve
+            global structure, better for general topic separation. For most text clustering,
+            10-20 works well.
+
+        umap_min_dist_min (float, default=0.0), umap_min_dist_max (float, default=0.1):
+            Bounds for UMAP's min_dist parameter, which controls how tightly points cluster.
+            Lower values (0.0-0.1) create tighter, more compact clusters, good for finding
+            distinct groups. Higher values (0.5-1.0) create more evenly dispersed embeddings,
+            useful when clusters might overlap. Most text clustering works well with values
+            under 0.2.
+
+        umap_spread_min (float, default=1.0), umap_spread_max (float, default=10.0):
+            Bounds for UMAP's spread parameter, which affects the scale of the embedding.
+            Lower values create a more compressed visualization, while higher values spread
+            points out more. This primarily affects visualization rather than clustering quality.
+
+        umap_learning_rate_min (float, default=0.08), umap_learning_rate_max (float, default=1.0):
+            Bounds for UMAP's learning_rate parameter, which controls the embedding optimization.
+            Lower values produce more stable results but may converge to suboptimal solutions.
+            Higher values explore more of the space but might be less stable.
+
+        umap_min_dims (int, default=2), umap_max_dims (int, default=20):
+            Bounds for UMAP's output dimensionality when dims is None. Lower dimensions (2-5)
+            are easier to visualize but may lose information. Higher dimensions (10-50) preserve
+            more structure but increase computational cost. For clustering without visualization,
+            3-15 dimensions often work well.
+
+        umap_metric (str, default="cosine"):
+            Distance metric for UMAP. Valid options include: "cosine", "euclidean", "manhattan",
+            "chebyshev", "minkowski", "canberra", "braycurtis", "mahalanobis", "wminkowski",
+            "seuclidean", "correlation", and "haversine". "cosine" is generally best for text
+            embeddings as it focuses on direction rather than magnitude. "euclidean" is better
+            for normalized embeddings and becomes mathematically equivalent to cosine distance
+            when vectors are normalized. "manhattan" can be more robust to outliers.
+
+        dims (int, default=3):
+            Fixed dimensionality for UMAP reduction. If provided, this overrides the min/max dims
+            search. Set to None to allow optimization to search for the best dimensionality.
+            3 is good for visualization, while higher values (5-15) might create better clusters
+            for complex datasets.
+
+        # HDBSCAN Parameters
+
+        hdbscan_min_cluster_size_multiplier_min (float, default=0.005),
+        hdbscan_min_cluster_size_multiplier_max (float, default=0.025):
+            Bounds for calculating HDBSCAN's min_cluster_size as a fraction of the dataset size.
+            Lower values (0.001-0.01) allow smaller clusters, good for finding niche topics in
+            diverse data. Higher values (0.02-0.1) require larger, more significant clusters,
+            better for identifying major themes. For a dataset of 1000 points, these defaults
+            would search min_cluster_size between 5 and 25.
+
+        hdbscan_min_samples_min (int, default=2), hdbscan_min_samples_max (int, default=50):
+            Bounds for HDBSCAN's min_samples parameter, which determines how conservative the
+            clustering is. Lower values are more aggressive in forming clusters, while higher
+            values require more evidence for cluster membership, producing more robust clusters
+            but potentially more noise.
+
+        hdbscan_epsilon_min (float, default=0.0), hdbscan_epsilon_max (float, default=1.0):
+            Bounds for HDBSCAN's epsilon parameter, which allows relaxed cluster membership.
+            Higher values expand clusters to include more borderline points, reducing noise.
+            Lower values maintain stricter cluster boundaries. 0.0 disables this relaxation.
+
+        hdbscan_metric (str, default="euclidean"):
+            Distance metric for HDBSCAN. Valid options include: "euclidean", "manhattan",
+            "chebyshev", "minkowski", "canberra", "braycurtis", "mahalanobis", "wminkowski",
+            "seuclidean", "correlation", and "haversine". "euclidean" works well on UMAP-reduced
+            data. Note that for low-dimensional space (after UMAP reduction), euclidean distance
+            is typically more appropriate, even if you used cosine distance in UMAP.
+
+        hdbscan_cluster_selection_method (str, default="eom"):
+            Method for cluster extraction in HDBSCAN. Valid options are "eom" or "leaf".
+            "eom" (Excess of Mass) tends to produce more clusters of varying sizes, while
+            "leaf" produces more homogeneously sized clusters. For text clustering, "eom"
+            usually provides more meaningful distinctions.
+
+        hdbscan_outlier_threshold (int, default=10):
+            Percentile threshold for determining core points within clusters. Lower values (5-10)
+            are more selective, designating fewer points as core, while higher values (20-30)
+            include more points as core. This affects labeling quality: too low can cause clusters
+            without core points, while too high may include less representative points.
+
+        # PCA Configuration
+
+        target_pca_evr (float, default=0.9):
+            Target explained variance ratio for optional PCA preprocessing. PCA (Principal Component
+            Analysis) is applied before UMAP to reduce high-dimensional embeddings by identifying
+            the components that contribute the most information. This preprocessing step helps
+            UMAP find better manifold embeddings by removing noise and focusing on significant
+            patterns in the data. Higher values (0.95-0.99) preserve more information but reduce
+            dimensionality less. Lower values (0.7-0.85) aggressively reduce dimensions, potentially
+            improving clustering speed and noise reduction at the cost of information loss.
+            0.9 is a good balance for most applications. Must be between 0.0 (exclusive) and 1.0 (inclusive).
+
+        # Branch Detection Configuration
+
+        hdbscan_branch_detection (bool, default=False):
+            Whether to enable branch detection in HDBSCAN. When True, identifies branches in the
+            cluster hierarchy, which can reveal sub-topics or hierarchical structure. This can
+            create more nuanced clustering but increases complexity and computation time.
+
+        branch_min_cluster_size_multiplier_min (float, default=0.005),
+        branch_min_cluster_size_multiplier_max (float, default=0.025):
+            Bounds for the branch min_cluster_size multiplier, similar to the HDBSCAN parameter.
+            Only relevant when branch detection is enabled.
+
+        branch_selection_persistence_min (float, default=0.0),
+        branch_selection_persistence_max (float, default=0.1):
+            Bounds for branch selection persistence, which controls how aggressively branches
+            are selected. Higher values require more significant branches.
+
+        branch_label_sides_as_branches (bool, default=False):
+            Whether to label sides as branches in the branch detection process. When True,
+            this can reveal more subtle branching structures.
 
     Returns:
-        dict: Dictionary containing:
-            - 'clustered_df': The DataFrame with clustering results.
-            - 'umap_model': The UMAP model instance used.
-            - 'hdbscan_model': The HDBSCAN model instance used.
-            - 'pca_model': The PCA model instance used.
-            - 'metrics_dict': Key clustering metrics.
-            - 'branch_detector': The fitted BranchDetector if branch detection is enabled, else None.
+        dict: A dictionary containing:
+            - 'clustered_df' (pd.DataFrame): The input DataFrame augmented with clustering results.
+              Added columns include:
+                * 'membership_strength' (float): Indicates how strongly each point belongs to
+                  its assigned cluster (higher values = stronger membership). Useful for
+                  filtering points by confidence or identifying borderline cases.
+                * 'core_point' (bool): Flag indicating whether the point is a core point of
+                  the cluster (True) or a peripheral point (False). Core points are essential
+                  for later labeling with add_labels().
+                * 'outlier_score' (float): For non-branch detection, indicates how outlier-like
+                  a point is (higher = more outlier-like). NaN for branch detection mode.
+                * 'reduced_vector' (list): The reduced-dimensional coordinates for each point,
+                  useful for visualization and further analysis.
+                * 'cluster_id' (int): The assigned cluster ID, with -1 indicating noise points.
+                  This is your primary column for grouping and analyzing clusters.
+
+            - 'umap_model' (umap.UMAP): The fitted UMAP model instance used for dimensionality
+              reduction. Can be used for projecting new data points onto the same embedding space
+              with umap_model.transform(new_data).
+
+            - 'hdbscan_model' (hdbscan.HDBSCAN): The fitted HDBSCAN model instance used for
+              clustering. Can be used to predict cluster membership for new data points with
+              hdbscan_model.approximate_predict(new_data).
+
+            - 'pca_model' (sklearn.decomposition.PCA or None): The PCA model instance used for
+              preprocessing, or None if PCA was not applied. If present, new data should be
+              preprocessed with this model before UMAP projection.
+
+            - 'metrics_dict' (dict): Dictionary containing key clustering metrics:
+                * 'reduced_dimensions' (int): Final dimensionality used for clustering
+                * 'n_clusters' (int): Number of clusters found (excluding noise)
+                * 'noise_ratio' (float): Proportion of points classified as noise
+                * 'silhouette_score' (float, optional): Average silhouette score of the clustering
+              These metrics help evaluate the quality of the clustering and can guide parameter
+              adjustments for future runs.
+
+            - 'branch_detector' (hdbscan.BranchDetector or None): The fitted BranchDetector if
+              branch detection was enabled, else None. Used internally but also available if
+              you need to apply branch detection logic to new data.
     """
     try:
         # Validate parameters first

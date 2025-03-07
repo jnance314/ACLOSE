@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "aclose"
-version = "0.0.1"
-description = "ACLOSE- Automatic Clustering and Labeling Over Semantic Embeddings"
+version = "0.1.0"
+description = "ACLOSE- Automatic Clustering and Labeling Of Semantic Embeddings"
 authors = ["Joe Nance <joe@nceno.app>"]
 license = "MIT"
 readme = "README.md"

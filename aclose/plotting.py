@@ -910,16 +910,73 @@ class ScatterPlot:
 
 def silhouette_fig(clustered_df: pd.DataFrame) -> go.Figure:
     """
-    Generate an enhanced silhouette plot for clustering analysis using Plotly.
+    Generate an enhanced silhouette plot for evaluating clustering quality.
 
-    The function computes silhouette scores for clusters (excluding noise) and visualizes
-    them with clusters ordered by size. A vertical dashed line indicates the average silhouette score.
+    The silhouette plot is a powerful visualization that shows how well each point lies within
+    its assigned cluster. It helps identify:
+    - Well-formed clusters (high silhouette values)
+    - Potential misclassifications (negative or low silhouette values)
+    - The overall quality of the clustering (average silhouette score)
 
-    Args:
-        - clustered_df (pd.DataFrame): DataFrame containing clustering results with 'reduced_vector' and 'cluster_id'.
+    This function creates a visually enhanced silhouette plot with clusters ordered by size,
+    color-coded for easy identification, and includes the average silhouette score as a
+    reference line.
+
+    Parameters:
+        clustered_df (pd.DataFrame):
+            DataFrame containing clustering results from run_clustering(). Must include columns:
+            'cluster_id' (int): cluster identifiers with -1 for noise
+            'reduced_vector' (list-like): reduced dimensional representations of each point,
+                                          typically 2D or 3D coordinates from UMAP reduction
+            Silhouette scores are computed using Euclidean distance on these reduced vectors.
 
     Returns:
-        - go.Figure: Plotly Figure object representing the silhouette plot.
+        go.Figure:
+            A Plotly Figure object containing the silhouette plot visualization. This
+            interactive figure includes:
+
+            - Individual silhouette profiles for each cluster, color-coded to match
+              other visualizations from this package
+            - Clusters ordered by size (largest at top) for easier interpretation
+            - Text labels identifying each cluster
+            - A vertical dashed red line showing the average silhouette score
+            - Dark theme styling for better visibility of silhouette patterns
+
+            The figure can be:
+            - Displayed directly with fig.show()
+            - Saved as an HTML file with fig.write_html("silhouette.html")
+            - Converted to static images with fig.write_image("silhouette.png")
+            - Customized further using Plotly's update_layout() and other methods
+            - Embedded in Jupyter notebooks, dashboards, or web applications
+
+            The silhouette values range from -1 to 1:
+            - Values near 1 indicate points well-matched to their clusters
+            - Values near 0 indicate points on cluster boundaries
+            - Negative values suggest potential misclassifications
+
+            When analyzing this plot, pay attention to:
+            - The width of each cluster's profile (indicates cluster size)
+            - The shape of each profile (consistent high values indicate coherent clusters)
+            - Clusters with many negative values (may indicate fragmented clusters)
+            - The average silhouette score (higher is better, >0.5 is generally good)
+
+    Notes:
+        - Noise points (cluster_id = -1) are excluded from the silhouette calculation.
+        - The function automatically assigns colors to clusters for visual distinction.
+        - Higher silhouette values (closer to 1.0) indicate better clustering.
+        - Average silhouette scores above 0.5 generally indicate reasonable clustering;
+          scores above 0.7 indicate strong clustering structure.
+        - The plot arranges clusters by size (largest first) to make the visualization
+          more interpretable.
+        - Clusters with many points near or below 0 may benefit from re-clustering or
+          parameter adjustments.
+
+    Example interpretation:
+        - If most clusters show high silhouette values (>0.5), the clustering is robust.
+        - If specific clusters show poor silhouette values, consider adjusting parameters
+          or removing those clusters.
+        - If the average silhouette is low (<0.3), consider different clustering parameters
+          or preprocessing steps.
     """
     try:
         # -------------------------------
@@ -938,13 +995,70 @@ def silhouette_fig(clustered_df: pd.DataFrame) -> go.Figure:
 
 def bars_fig(clusters_df: pd.DataFrame) -> go.Figure:
     """
-    Generate a horizontal bar chart of cluster sizes with topics (if available) using Plotly.
+    Generate a horizontal bar chart visualizing cluster sizes with topic labels.
 
-    Args:
-        - clusters_df (pd.DataFrame): DataFrame containing clustering results with 'cluster_id' and optionally 'topic'.
+    This function creates an informative bar chart that shows the relative sizes of each cluster,
+    identified by both cluster ID and topic label (if available). It provides a quick overview
+    of your clustering results, highlighting dominant topics and the distribution of data points
+    across clusters.
+
+    The visualization:
+    - Displays clusters in order of size (smallest to largest by default)
+    - Color-codes bars to match other visualizations (silhouette_fig and scatter_fig)
+    - Shows exact counts as text annotations
+    - Includes both cluster IDs and topic labels for clear identification
+
+    Parameters:
+        clusters_df (pd.DataFrame):
+            DataFrame containing clustering results from run_clustering(). Must include a
+            'cluster_id' column (int) with cluster identifiers (-1 for noise). If a 'topic'
+            column (str) exists (from add_labels), these topics will be displayed alongside
+            cluster IDs in the visualization.
 
     Returns:
-        - go.Figure: Plotly Figure object representing the bar chart.
+        go.Figure:
+            A Plotly Figure object containing a horizontal bar chart visualization.
+            The chart provides a clear overview of cluster sizes and topics, with:
+
+            - Horizontal bars representing each cluster, sorted by size (smallest to largest)
+            - Color-coded bars matching colors used in other visualizations from this package
+            - Text labels showing both cluster IDs and topic names
+            - Count values displayed at the end of each bar
+            - Dark theme styling for better visibility
+            - Automatic height scaling based on the number of clusters
+
+            The figure can be:
+            - Displayed directly with fig.show()
+            - Saved as an HTML file with fig.write_html("cluster_sizes.html")
+            - Converted to static images with fig.write_image("cluster_sizes.png")
+            - Customized further using Plotly's update_layout() and other methods
+            - Embedded in Jupyter notebooks, dashboards, or web applications
+
+            This visualization complements the scatter_fig() and silhouette_fig() by providing:
+            - A quick summary of the cluster distribution in your dataset
+            - A clear view of the relative sizes of each topic
+            - An easy way to identify dominant vs. niche topics
+            - A legend that pairs cluster IDs with their semantic labels
+
+            For presentations and reports, consider placing this chart alongside the other
+            visualizations to give viewers a complete picture of your clustering results.
+
+    Notes:
+        - Noise points (cluster_id = -1) are excluded from the visualization to focus on
+          meaningful clusters.
+        - The chart height automatically scales based on the number of clusters for optimal
+          readability.
+        - The consistent color coding across visualizations makes it easier to correlate
+          information between different views of your data.
+        - If the 'topic' column is missing, the function will create default labels in the
+          format "Cluster X".
+
+    Applications:
+        - Quickly assess the distribution of data across topics
+        - Identify dominant vs. niche topics
+        - Communicate clustering results to stakeholders
+        - Track changes in topic distribution when comparing different clustering runs
+        - Provide context for more detailed visualizations
     """
     try:
         # -------------------------------
@@ -1009,19 +1123,95 @@ def scatter_fig(
     id_col_name=None,
 ) -> go.Figure:
     """
-    Generate a scatter plot (2D or 3D) for clustering visualization using Plotly.
+    Generate an interactive scatter plot visualization of clustering results.
 
-    The function expects the DataFrame to include a 'reduced_vector' column.
-    For vectors with more than 3 dimensions, a warning is logged and a placeholder figure is returned.
+    This function creates a visually rich 2D or 3D plot (depending on the dimensionality of
+    the reduced vectors) that shows the spatial distribution of clusters. It's a powerful
+    tool for exploring clustering results, inspecting individual data points, and understanding
+    the relationships between clusters.
 
-    Args:
-        clusters_df (pd.DataFrame): DataFrame containing clustering results with 'reduced_vector', 'cluster_id', and optionally 'topic'.
-        content_col_name (str): Name of the column with textual content. Defaults to 'content'.
-        wrap_width (int): Maximum width for wrapping text in hover labels. Defaults to 100.
-        id_col_name: Optional column name for record IDs.
+    The plot includes:
+    - Color-coded points for each cluster
+    - Cluster labels positioned at cluster centroids
+    - Interactive hover information showing content and metadata for each point
+    - Noise points (if any) shown in a distinct color with reduced opacity
+
+    Parameters:
+        clusters_df (pd.DataFrame):
+            DataFrame containing clustering results from run_clustering(). Must include columns:
+            'cluster_id' (int): cluster identifiers with -1 for noise
+            'reduced_vector' (list-like): reduced dimensional coordinates, must be 2D or 3D
+                                          (e.g., [x, y] or [x, y, z])
+            Also requires a content column (specified by content_col_name) containing text (str).
+            If 'topic' column (str) exists, it will be used for cluster labels.
+
+        content_col_name (str, default="content"):
+            Name of the column containing text content that will be displayed when hovering
+            over points in the scatter plot.
+
+        wrap_width (int, default=100):
+            Maximum width (in characters) for wrapping text in hover labels.
+            Values below 20 will be automatically increased to 20.
+
+        id_col_name (str, default=None):
+            Optional column name for record IDs to include in hover information. For example,
+            if your dataset contains movie descriptions, you might use the movie title column
+            (e.g., id_col_name="title") to help identify each point in the visualization.
+            This can be useful for tracking specific points of interest or connecting
+            visualization data back to your original dataset.
 
     Returns:
-        go.Figure: Plotly Figure object representing the scatter (or point cloud) plot.
+        go.Figure:
+            A Plotly Figure object containing an interactive scatter plot visualization.
+            The function automatically creates either a 2D or 3D plot based on the
+            dimensionality of the reduced vectors (2D for 2-dimensional vectors, 3D for
+            3-dimensional vectors). For vectors with more than 3 dimensions, a warning
+            message is displayed instead.
+
+            The figure includes:
+            - Color-coded points for each cluster, matching colors used in other visualizations
+              from this package
+            - Large text labels at cluster centroids showing cluster topics
+            - Noise points (if any) displayed with reduced opacity
+            - Interactive hover information displaying:
+                * Cluster ID and topic (if available)
+                * ID value (if id_col_name was provided)
+                * Text content from the specified content column
+            - A legend for identifying clusters
+            - Dark theme styling for better visibility of cluster patterns
+
+            The figure can be:
+            - Displayed directly with fig.show()
+            - Saved as an HTML file with fig.write_html("clusters.html")
+            - Converted to static images with fig.write_image("clusters.png")
+            - Customized further using Plotly's update_layout() and other methods
+            - Embedded in Jupyter notebooks, dashboards, or web applications
+
+            For 3D plots, additional interaction is available:
+            - Rotation (click and drag)
+            - Zoom (scroll)
+            - Pan (right-click and drag)
+
+            Note that for very large datasets (10,000+ points), the interactive performance
+            may decrease. Consider sampling your data or using a static image export if needed.
+
+    Notes:
+        - The function automatically determines whether to create a 2D or 3D visualization
+          based on the dimensionality of the 'reduced_vector' column.
+        - For vectors with more than 3 dimensions, a warning is displayed (visualization
+          is limited to 3D).
+        - Noise points (cluster_id = -1) are shown with reduced opacity.
+        - Hover information includes cluster ID, topic (if available), content, and optional ID.
+        - The plot uses a dark theme optimized for visualizing clusters.
+        - For large datasets, rendering may be slow. Consider sampling your data first
+          if performance is an issue.
+
+    Visualization tips:
+        - Look for well-separated clusters, which indicate distinct topics
+        - Clusters that overlap might benefit from parameter tuning
+        - Examine outliers and noise points to identify potential improvements
+        - Use the interactive features (zoom, rotation in 3D) to explore the structure
+        - Hover over points to inspect individual content and verify cluster coherence
     """
     try:
         # Validate parameters first. Clunky code, but this also makes sure that wrap_width is at least 20.

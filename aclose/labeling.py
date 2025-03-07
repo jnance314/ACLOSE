@@ -1022,26 +1022,125 @@ def add_labels(
     content_col_name: str = "content",
 ) -> Dict[str, object]:
     """
-    Functional interface for labeling clusters with a user-friendly API.
+    Generate semantic topic labels for clusters using a language model.
 
-    This function accepts a range of keyword arguments to configure the labeling process,
-    without requiring the user to instantiate configuration objects. Internally, it creates
-    configuration objects and then processes the cluster DataFrame to assign semantic topic labels.
+    This function uses a two-pass approach: first generating initial topic labels from core points,
+    then refining them by considering peripheral points. This produces more representative and
+    generalizable labels for each cluster.
 
-    Args:
-        cluster_df (pd.DataFrame): DataFrame containing clustering results.
-        llm_model (str): Identifier for the language model (default: 'o1').
-        language (str): The language for output labels (default: 'english').
-        temperature (float): Temperature parameter for the language model (default: 1.0).
-        data_description (str): Data context to be appended to prompts.
-        ascending (bool): Order for processing clusters (default: False).
-        core_top_n (int): Number of top core points to consider (default: 10).
-        peripheral_n (int): Number of peripheral points to sample (default: 12).
-        num_strata (int): Number of strata for sampling peripheral points (default: 3).
-        content_col_name (str): Column name in cluster_df that contains text content (default: 'content').
+    Parameters:
+        cluster_df (pd.DataFrame):
+            DataFrame containing clustering results from run_clustering(). Must include columns:
+            'cluster_id' (int): cluster identifiers with -1 for noise
+            'core_point' (bool): flags indicating core points within clusters
+            'membership_strength' (float): strength of point's association with its cluster
+            Also requires a text content column (specified by content_col_name) containing
+            the textual data (str) to be used for generating labels.
+
+        llm_model (str, default="o1"):
+            Identifier for the language model to use. Valid options are limited to:
+            - "o1"
+            - "o1-preview"
+            - "o1-mini"
+            - "o3-mini"
+            - "o3-mini-high"
+            Choose more capable models for complex data or when high-quality labels are critical.
+
+        language (str, default="english"):
+            Language for output labels. Set to the appropriate language if your data is not in
+            English (e.g., "spanish", "french", "german", "chinese", etc.). The LLM will generate
+            labels in this language.
+
+        temperature (float, default=1.0):
+            Controls randomness in the language model. Lower values (0.0-0.5) produce more
+            consistent, deterministic labels. Higher values (0.7-1.0) produce more diverse and
+            creative labels. For scientific or technical data, consider lower values; for
+            creative content, higher values may be appropriate.
+
+        data_description (str, default="..."):
+            Description of the data to provide context to the language model. This text is
+            directly included in the prompt sent to the LLM, so you can be as verbose as needed.
+            You can use f-strings to dynamically generate context based on your dataset. A good
+            description significantly improves label quality by helping the model understand
+            domain-specific terminology and concepts. Include information about the data source,
+            domain, typical content patterns, and any specific labeling preferences.
+
+        ascending (bool, default=False):
+            Order for processing clusters. When False (default), larger clusters are processed
+            first. Larger clusters often contain more semantic variance (points more spread out
+            in the embedding space), so processing them first helps establish more generalized
+            topic labels that are clearly differentiated. When True, smaller clusters are
+            processed first, which can be beneficial when smaller clusters represent specific
+            niche topics that need precise differentiation from the broader topics in larger
+            clusters. This parameter affects the quality of the generated labels, not just
+            processing efficiency.
+
+        core_top_n (int, default=10):
+            Number of top core points to consider for initial labeling. Higher values (15-20)
+            provide more context but increase API costs. Lower values (5-8) are more economical
+            but may produce less representative labels. 10 is a good balance for most applications.
+            For very diverse clusters, consider increasing.
+
+        peripheral_n (int, default=12):
+            Number of peripheral points to sample for label refinement. Higher values give a
+            more complete picture of the cluster's diversity but increase API costs. Lower
+            values are more economical but may miss important variations. For heterogeneous
+            clusters, consider increasing.
+
+        num_strata (int, default=3):
+            Number of strata for sampling peripheral points. This divides the non-core points
+            into quantiles based on membership strength, ensuring samples represent the full
+            spectrum of the cluster's periphery. Each stratum contains points at different
+            "distances" from the cluster core in semantic space. Higher values enable more
+            nuanced sampling across this distribution, capturing points that are only weakly
+            connected to the cluster as well as those just short of being core points.
+            For large clusters with varying membership strengths, 3-5 strata work well.
+            For smaller clusters, 2-3 is usually sufficient.
+
+        content_col_name (str, default="content"):
+            Name of the column in cluster_df containing the text content to be labeled.
+            Change this if your DataFrame uses a different column name for the text data.
 
     Returns:
-        pd.DataFrame: The input DataFrame augmented with a new 'topic' column containing semantic labels.
+        Dict[str, object]: A dictionary containing:
+            - 'dataframe' (pd.DataFrame): The input DataFrame with an added 'topic' column (str)
+              containing semantic labels for each data point. This column preserves the original
+              structure of your data while adding the generated topic labels. Points from the
+              same cluster share the same label. Noise points (cluster_id = -1) are consistently
+              labeled as "Noise". If labeling fails for a cluster, it will receive a fallback
+              label in the format "Unlabeled_{cluster_id}".
+
+            - 'labels_dict' (dict): A dictionary mapping cluster IDs (int) to their topic labels (str).
+              This mapping excludes noise points and provides a convenient way to:
+                * Get a quick overview of all topics without examining the full DataFrame
+                * Map topics to clusters in visualizations or reports
+                * Apply the same labels to new data points after clustering
+                * Compare topic distributions across different clustering runs
+
+              Format: {cluster_id: "Topic Label", ...}
+              Example: {0: "Financial News", 1: "Technology Reviews", 2: "Sports Coverage"}
+
+    Usage examples:
+        # Get the labeled DataFrame for further analysis
+        labeled_df = result["dataframe"]
+
+        # Count documents per topic
+        topic_counts = labeled_df["topic"].value_counts()
+
+        # Access just the mapping between cluster IDs and topics
+        topic_mapping = result["labels_dict"]
+
+        # Use the mapping to create a readable report of cluster sizes
+        for cluster_id, topic in topic_mapping.items():
+            size = (labeled_df["cluster_id"] == cluster_id).sum()
+            print(f"Cluster {cluster_id} ({topic}): {size} documents")
+
+    Notes:
+        - Requires environment variables OPENAI_API_KEY and HELICONE_API_KEY to be set.
+        - Noise points (cluster_id = -1) are automatically labeled as "Noise".
+        - The function processes clusters asynchronously for efficiency.
+        - The two-pass approach ensures labels are both representative of core cluster concepts
+          and generalizable to the entire cluster.
     """
     try:
         # Validate parameters first.

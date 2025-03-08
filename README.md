@@ -68,6 +68,17 @@ pip install aclose
 
 ## 🚀 Quick Start
 
+### 0. Set your API key(s) if using labeling
+OpenAI is required, but Helicone is optional (useful for LLM call traces)
+```python
+os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+os.environ["HELICONE_API_KEY"] = HELICONE_API_KEY
+```
+Note: ACLOSE only uses 2 successful LLM calls per cluster, and they happen during labeling
+```python
+aclose.add_labels(df)
+```
+
 ### 1. Cluster your embeddings
 
 ```python

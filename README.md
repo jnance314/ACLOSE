@@ -314,5 +314,7 @@ Here is a list of features that we are planning to add in the future. If you wou
 1. Support for non-openai and OSS LLMs via LiteLLM
 2. More than two passes for topic label refinement
 3. Support for other clustering algorithms
-5. Lightweight (non-langchain) utilities for creating chunking and embedding
-6. More options for chart visualization
+4. Lightweight (non-langchain) utilities for creating chunking and embedding
+5. More options for chart visualization
+6. Evals. For example, LSA/LDA vs ACLOSE
+7. Other methods for model selection from the pareto front
